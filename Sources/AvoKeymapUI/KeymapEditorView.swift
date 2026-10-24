@@ -369,6 +369,10 @@ final class KeymapEditorView: NSView {
             self?.refocus()
         }
         model.setClickZone = { [weak self] on in self?.setClickZone(on) }
+        model.displayAspect = { [weak self] in
+            guard let rect = self?.displayRect(), rect.width > 0, rect.height > 0 else { return 16.0 / 9.0 }
+            return rect.width / rect.height
+        }
         model.setDPadSlot = { [weak self] slot in
             guard let self, let id = selected, let control = profile.controls.first(where: { $0.id == id }) else { return }
             dpadSlot = slot

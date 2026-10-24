@@ -232,6 +232,8 @@ final class KeymapEditorModel: ObservableObject {
     var setDPadSlot: (Int) -> Void = { _ in }
     /// Gives the selected control a click zone around its button, or takes it away.
     var setClickZone: (Bool) -> Void = { _ in }
+    /// The game's width by its height, which a scroll bar turned across keeps its length on.
+    var displayAspect: () -> Double = { 16.0 / 9.0 }
     var mouseButtons: () -> [HazeMenuEntry] = { [] }
     /// The actions to add to the selected control.
     var addActionMenu: () -> [HazeMenuEntry] = { [] }
@@ -938,7 +940,10 @@ private struct InspectorSettings: View {
             let vertical = control.isVerticalScrollBar
             InspectorRow(label: L("Direction")) {
                 QuickSegmented(label: L("Direction"), options: [(true, L("Up and down")), (false, L("Across"))], selection: vertical,
-                               fill: true) { on in model.update { $0.setScrollBar(vertical: on) } }
+                               fill: true) { on in
+                    let aspect = model.displayAspect()
+                    model.update { $0.setScrollBar(vertical: on, aspect: aspect) }
+                }
             }
             InspectorRow(label: L("Wheel up drags it"), help: L("Which way a turn of the wheel up drags the thumb; down drags it back.")) {
                 QuickSegmented(label: L("Wheel up drags it"),
@@ -1486,7 +1491,6 @@ extension Control {
         if case .ads(let p, _) = kind { kind = .ads(p, toggle: toggle) }
     }
 
-    /// Whether a click area's click also touches the game.
     /// A scroll bar's wheel-up end is the top or the right one.
     var scrollsForward: Bool {
         guard case let .scrollBar(from, to, _, _) = kind else { return true }
@@ -1494,21 +1498,28 @@ extension Control {
     }
 
     /// A scroll bar turned up and down or across (around its middle, as long
-    /// on the screen as it was), wheel up dragging the other way, or another
-    /// step or rest point.
-    mutating func setScrollBar(vertical: Bool? = nil, forward: Bool? = nil, step: Double? = nil, rest: Double? = nil) {
+    /// on a display of `aspect`, its width by its height, as it was, and moved
+    /// onto the screen rather than cut at its edge), wheel up dragging the
+    /// other way, or another step or rest point.
+    mutating func setScrollBar(vertical: Bool? = nil, forward: Bool? = nil, step: Double? = nil, rest: Double? = nil,
+                               aspect: Double = 16.0 / 9.0) {
         guard case let .scrollBar(from, to, oldRest, oldStep) = kind else { return }
         var (a, b) = (from, to)
         if let vertical, vertical != isVerticalScrollBar {
+            let aspect = aspect.isFinite && aspect > 0 ? aspect : 16.0 / 9.0
             let mid = NormalizedPoint((a.x + b.x) / 2, (a.y + b.y) / 2)
-            let half = max(abs(b.x - a.x), abs(b.y - a.y)) / 2
+            // Its length on the screen in display heights, no shorter than the editor makes one.
+            let length = max(hypot((b.x - a.x) * aspect, b.y - a.y), Control.minimumScrollTrack)
             let forward = scrollsForward
+            func clamped(_ value: Double) -> Double { min(max(value, 0), 1) }
             if vertical {
-                a = NormalizedPoint(mid.x, min(max(mid.y + (forward ? half : -half), 0), 1))
-                b = NormalizedPoint(mid.x, min(max(mid.y - (forward ? half : -half), 0), 1))
+                let half = min(length, 1) / 2, y = min(max(mid.y, half), 1 - half)
+                a = NormalizedPoint(mid.x, clamped(forward ? y + half : y - half))
+                b = NormalizedPoint(mid.x, clamped(forward ? y - half : y + half))
             } else {
-                a = NormalizedPoint(min(max(mid.x - (forward ? half : -half), 0), 1), mid.y)
-                b = NormalizedPoint(min(max(mid.x + (forward ? half : -half), 0), 1), mid.y)
+                let half = min(length / aspect, 1) / 2, x = min(max(mid.x, half), 1 - half)
+                a = NormalizedPoint(clamped(forward ? x - half : x + half), mid.y)
+                b = NormalizedPoint(clamped(forward ? x + half : x - half), mid.y)
             }
         }
         var newRest = rest ?? oldRest
@@ -1520,6 +1531,7 @@ extension Control {
         }
     }
 
+    /// Whether a click area's click also touches the game.
     mutating func setPassThrough(_ on: Bool) {
         if case .clickArea(let area, _) = kind { kind = .clickArea(area, passThrough: on) }
     }
