@@ -191,6 +191,8 @@ final class KeymapEditorModel: ObservableObject {
     /// The mode whose name is being typed in its tab.
     @Published var renaming: String?
     @Published var hasEye = false
+    /// The scroll bars over the eye's area, which work only while the mouse is free.
+    @Published var barsOverTheEye: Set<String> = []
     @Published var showOnGame = true
     @Published var hintOpacity = 0.75
     @Published var editorOpacity = 0.6
@@ -947,6 +949,12 @@ private struct InspectorSettings: View {
                    Control.castReachRange, step: 0.05, text: percent(reach), help: L("How far from your hero the cursor must be for a full drag."))
         case let .scrollBar(_, _, rest, step):
             let vertical = control.isVerticalScrollBar
+            if model.barsOverTheEye.contains(control.id) {
+                Text(verbatim: L("Over the eye’s area it works only while the mouse is free: while you aim, its drag there would turn the camera."))
+                    .font(QuickHaze.mona(11.5))
+                    .foregroundStyle(QuickHaze.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             InspectorRow(label: L("Direction")) {
                 QuickSegmented(label: L("Direction"), options: [(true, L("Up and down")), (false, L("Across"))], selection: vertical,
                                fill: true) { on in

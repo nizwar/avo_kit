@@ -255,6 +255,32 @@ struct KeymapEditorTests {
         #expect(abs(t4.y - f4.y) >= Control.minimumScrollTrack - 1e-12)
     }
 
+    @Test("A track across dragged as short as the editor lets it saves (a 20:9 picture)")
+    func shortestTrackSaves() {
+        let bar = Control(id: "s", kind: .scrollBar(from: NormalizedPoint(0.3, 0.5), to: NormalizedPoint(0.6, 0.5), rest: 0.5, step: 0.1))
+        let editor = Editor(KeymapProfile(package: "x", name: "x", controls: [bar]))
+        defer { editor.close() }
+        editor.model.select("s")
+        editor.drag(from: (0.6, 0.5), to: (0.3, 0.5))
+        guard case let .scrollBar(from, to, _, _) = editor.profile.controls[0].kind else { Issue.record("not a bar"); return }
+        #expect(to.x > from.x, "the end kept its side")
+        editor.model.done()
+        #expect(editor.saved.profile != nil, "Done refused: \(editor.model.status)")
+    }
+
+    @Test("A scroll bar over the eye's area says it works only while the mouse is free")
+    func scrollBarOverTheEye() {
+        let eye = Control(id: "eye", kind: .aim(area: NormalizedRect(0.5, 0.1, 1, 0.7), sensitivity: AxisPair(x: 1, y: 1),
+                                                adsSensitivity: AxisPair(x: 1, y: 1), exponent: 1, deadzone: 0, invertY: false, stick: nil))
+        let over = Control(id: "s", kind: .scrollBar(from: NormalizedPoint(0.9, 0.8), to: NormalizedPoint(0.9, 0.2), rest: 0.5, step: 0.1))
+        let beside = Control(id: "b", kind: .scrollBar(from: NormalizedPoint(0.2, 0.8), to: NormalizedPoint(0.2, 0.2), rest: 0.5, step: 0.1))
+        let editor = Editor(KeymapProfile(package: "x", name: "x", controls: [eye, over, beside], fps: FPSSettings(aimControl: "eye")))
+        defer { editor.close() }
+        editor.model.select("s")
+        #expect(editor.model.barsOverTheEye == ["s"])
+        #expect(editor.profile.scrollBarsOverTheAimArea == ["s"])
+    }
+
     @Test("The panel's Direction turns a scroll bar on the editor's own picture")
     func scrollBarTurnedFromThePanel() {
         let bar = Control(id: "s", kind: .scrollBar(from: NormalizedPoint(0.5, 0.8), to: NormalizedPoint(0.5, 0.2), rest: 0.5, step: 0.1))

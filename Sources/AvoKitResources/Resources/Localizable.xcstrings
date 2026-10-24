@@ -2643,6 +2643,16 @@
         }
       }
     },
+    "Over the eye’s area it works only while the mouse is free: while you aim, its drag there would turn the camera." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Di area mata, ini hanya bekerja saat mouse bebas: saat Anda membidik, tarikannya di sana akan memutar kamera."
+          }
+        }
+      }
+    },
     "Place for %@:" : {
       "localizations" : {
         "id" : {

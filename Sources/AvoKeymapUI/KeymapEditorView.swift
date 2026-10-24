@@ -445,6 +445,13 @@ final class KeymapEditorView: NSView {
         if model.editingMode != editingMode { model.editingMode = editingMode }
         let hasEye = profile.controls.contains(where: isEye)
         if model.hasEye != hasEye { model.hasEye = hasEye }
+        // (Whether or not the eye has its key yet: KeymapProfile.scrollBarsOverTheAimArea once it has.)
+        let eyeAreas = profile.controls.filter(isEye).compactMap(\.fingerArea)
+        let barsOverTheEye = Set(profile.controls.compactMap { control -> String? in
+            guard case let .scrollBar(from, to, _, _) = control.kind, eyeAreas.contains(where: { $0.touches(from: from, to: to) }) else { return nil }
+            return control.id
+        })
+        if model.barsOverTheEye != barsOverTheEye { model.barsOverTheEye = barsOverTheEye }
         let selection = selected.flatMap { id in profile.controls.first { $0.id == id } }.map { control in
             KeymapEditorModel.Selection(control: control, title: name(of: control), symbol: Self.symbol(of: control),
                                         key: control.triggers.first { !$0.isGamepad }?.shortLabel,
