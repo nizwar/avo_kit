@@ -81,10 +81,20 @@ final class KeymapEditorView: NSView {
     private let original: KeymapProfile
     private var selected: String? {
         didSet {
+            if selected != oldValue { zoneHeld = false }
             refreshPanel()
             refreshBar()
         }
     }
+    /// The selected control's click zone is what the player took hold of
+    /// last (dragged it or its edges, or just made it): ⌥ and ⌥⇧ + arrow
+    /// keys move and size the zone rather than the control.
+    private var zoneHeld = false
+    /// How far each click zone's middle is from its button as the player
+    /// placed it, and where the last move of the button left the zone (the
+    /// offset holds while the zone is still there): a zone kept on the
+    /// screen at an edge comes back around its button with it.
+    private var zoneOffsets: [String: (dx: Double, dy: Double, zone: NormalizedRect)] = [:]
     /// The mode being edited (KeymapProfile.modes): its controls show, and
     /// new ones go in it. nil while the layout has no modes.
     private var editingMode: String? {
@@ -536,10 +546,39 @@ final class KeymapEditorView: NSView {
         return edges.isEmpty ? nil : edges
     }
 
-    /// The eye's swipe area and a click area: shown all the time, dragged by
-    /// their inside while selected (an anchor tap's reach is a circle, sized by its ↘ handle).
+    /// The eye's swipe area, a click area and a click zone: shown all the
+    /// time, dragged by their inside while selected (an anchor tap's reach
+    /// is a circle, sized by its ↘ handle).
     private func hasOwnArea(_ control: Control) -> Bool {
         control.area != nil
+    }
+
+    /// Whether the area the editor sizes for `control` is its click zone,
+    /// not an eye's swipe area or a click area.
+    private func areaIsZone(_ control: Control) -> Bool {
+        switch control.kind {
+        case .aim, .clickArea: false
+        default: control.clickZone != nil
+        }
+    }
+
+    /// Whether a drag of its body and ⌥ + arrow keys move the control itself:
+    /// a hotkey has no place on the game, and a macro stays where its first tap is.
+    private static func movesOnItsOwn(_ control: Control) -> Bool {
+        switch control.kind {
+        case .hotkey, .macro: false
+        default: true
+        }
+    }
+
+    /// Whether ⌥⇧ + arrow keys size the control itself (`step`): a
+    /// joystick, a smart cast's drag and an anchor tap's reach. A button
+    /// touches its point whatever its size.
+    private static func hasSize(_ control: Control) -> Bool {
+        switch control.kind {
+        case .dpad, .mobaMove, .smartCast, .anchor: true
+        default: false
+        }
     }
 
     /// The smallest area the editor makes: a square of Control.minimumAreaSide
@@ -573,11 +612,16 @@ final class KeymapEditorView: NSView {
     private func move(_ control: inout Control, to p: NormalizedPoint) {
         let before = anchor(of: control)
         moveButton(&control, to: p)
-        // A button's click zone goes with it.
-        if control.clickZone != nil {
-            let after = anchor(of: control)
-            control.moveArea(dx: after.x - before.x, dy: after.y - before.y)
-        }
+        // A button's click zone goes with it, as far from it as the player
+        // put it: one kept on the screen at an edge comes back around the
+        // button when the button does.
+        guard let zone = control.clickZone?.area else { return }
+        let after = anchor(of: control)
+        let kept = zoneOffsets[control.id].flatMap { $0.zone == zone ? (dx: $0.dx, dy: $0.dy) : nil }
+        let offset = kept ?? (dx: zone.center.x - before.x, dy: zone.center.y - before.y)
+        let moved = zone.offsetBy(dx: after.x + offset.dx - zone.center.x, dy: after.y + offset.dy - zone.center.y)
+        control.clickZone?.area = moved
+        zoneOffsets[control.id] = (offset.dx, offset.dy, moved)
     }
 
     private func moveButton(_ control: inout Control, to p: NormalizedPoint) {
@@ -664,6 +708,10 @@ final class KeymapEditorView: NSView {
     /// ⌥ + arrow keys: the selected object a step that way (an area with
     /// its point). ⌥⇧ + arrow keys: its size, an area's around its centre
     /// (↑ taller, ↓ shorter, → wider, ← narrower), the others' ↑ and → bigger.
+    /// A click zone is moved and sized on its own once the player took hold
+    /// of it (`zoneHeld`), or when its control has no place or size of its
+    /// own to change (a hotkey, a macro, a button's size); otherwise the
+    /// keys change the control, and its zone goes with it.
     /// For placing controls without dragging; these never become triggers.
     private func nudge(_ key: KeyName, flags: NSEvent.ModifierFlags) -> Bool {
         let held = flags.intersection([.option, .shift, .command, .control])
@@ -678,24 +726,30 @@ final class KeymapEditorView: NSView {
         }
         guard let id = selected, let i = index(of: id) else { return true }
         var control = profile.controls[i]
+        // An eye's swipe area and a click area are the control.
+        let ownArea = control.area != nil && !areaIsZone(control)
+        let zone = areaIsZone(control)
+        var sized: NormalizedRect?
         if held == [.option] {
-            // An area of its own moves; a button moves with its click zone (`move`).
-            if control.fingerArea != nil || { if case .clickArea = control.kind { true } else { false } }() {
+            if ownArea || (zone && (zoneHeld || !Self.movesOnItsOwn(control))) {
                 control.moveArea(dx: direction.x * Self.keyStep, dy: direction.y * Self.keyStep)
+                sized = control.area
             } else {
+                // A button moves with its click zone (`move`).
                 let a = anchor(of: control)
                 move(&control, to: NormalizedPoint(min(max(a.x + direction.x * Self.keyStep, 0), 1),
                                                    min(max(a.y + direction.y * Self.keyStep, 0), 1)))
             }
-        } else if let area = control.area {
+        } else if ownArea || (zone && (zoneHeld || !Self.hasSize(control))), let area = control.area {
             let minimum = minimumAreaSize(control)
             control.setArea(area.grown(dw: direction.x * 2 * Self.keyStep, dh: -direction.y * 2 * Self.keyStep,
                                        minWidth: minimum.width, minHeight: minimum.height))
+            sized = control.area
         } else {
             step(&control, bigger: direction.x > 0 || direction.y < 0)
         }
         profile.controls[i] = control
-        if let area = control.area { setStatus(KeymapPainter.sizeText(area)) }
+        if let sized { setStatus(KeymapPainter.sizeText(sized)) }
         needsDisplay = true
         return true
     }
@@ -860,15 +914,18 @@ final class KeymapEditorView: NSView {
         case let .areaEdge(id, edges)?:
             select(id)
             drag = areaDrag(id, edges: edges, from: p)
+            zoneHeld = profile.controls.first { $0.id == id }.map(areaIsZone) ?? false
         case .area(let id)?:
             select(id)
             drag = areaDrag(id, edges: [], from: p)
+            zoneHeld = profile.controls.first { $0.id == id }.map(areaIsZone) ?? false
         case .remove(let id)?:
             remove(id)
             drag = nil
             return
         case .resize(let id)?:
             select(id)
+            zoneHeld = false
             let corner = profile.controls.first { $0.id == id }.flatMap(resizeCorner) ?? p
             drag = .resize(id: id, offset: CGVector(dx: corner.x - p.x, dy: corner.y - p.y))
         case let .dpadSlot(id, slot)?:
@@ -878,12 +935,14 @@ final class KeymapEditorView: NSView {
             drag = moveDrag(id, from: p)
         case .swipeEnd(let id)?:
             select(id)
+            zoneHeld = false
             drag = .swipeEnd(id: id)
         case let .barEnd(id, start)?:
             select(id)
             drag = .barEnd(id: id, start: start)
         case .body(let id)?:
             select(id)
+            zoneHeld = false
             drag = moveDrag(id, from: p)
         case .hero?:
             selected = nil
@@ -938,10 +997,12 @@ final class KeymapEditorView: NSView {
         switch drag {
         case let .area(id, edges, start, grab):
             guard let i = index(of: id) else { return }
-            // From the area as the drag began, so nothing drifts.
+            // From the area as the drag began, so nothing drifts. A button's
+            // click zone lives beside its kind.
             var control = start
             dragArea(&control, edges: edges, from: grab, to: normalized(p))
             profile.controls[i].kind = control.kind
+            profile.controls[i].clickZone = control.clickZone
             dragPoint = p
         case let .move(id, offset):
             guard let i = index(of: id) else { return }
@@ -1659,6 +1720,8 @@ final class KeymapEditorView: NSView {
             let h = max(Double(bubbleRadius(profile.controls[i]) / max(rect.height, 1)) * 2.6, Control.minimumClickAreaSide), w = h / aspect
             let area = NormalizedRect(0, 0, w, h).offsetBy(dx: c.x - w / 2, dy: c.y - h / 2)
             profile.controls[i].clickZone = ClickZone(area: area)
+            // The keys move and size it next.
+            zoneHeld = true
             setStatus(String(localized: "A click inside the area presses “\(name(of: profile.controls[i]))” now. Drag the area or its edges over the game’s button.",
                              bundle: .avoSharedKit))
         }
