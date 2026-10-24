@@ -465,7 +465,7 @@ final class KeymapEditorView: NSView {
     }
 
     private func showHelp() {
-        setStatus(String(localized: "Click a button of the game, then press its key.", bundle: .avoSharedKit))
+        setStatus(String(localized: "Click a button in the game, then press its key.", bundle: .avoSharedKit))
     }
 
     /// What the panel shows of the layout: its modes, the selected control,
@@ -997,7 +997,7 @@ final class KeymapEditorView: NSView {
             }
             setStatus(String(localized: "\(short(trigger)) locks the mouse to aim with the eye, and frees it again.", bundle: .avoSharedKit))
         case .clickArea:
-            setStatus(String(localized: "A click area needs no key: it acts when it is clicked while the mouse is free.", bundle: .avoSharedKit))
+            setStatus(String(localized: "A click area needs no key: it does its actions when clicked while the mouse is free.", bundle: .avoSharedKit))
             return
         case .scrollBar where dpadSlot == Self.runSlot:
             // The key that drags the thumb back to rest.
@@ -1390,14 +1390,14 @@ final class KeymapEditorView: NSView {
         }
     }
 
-    /// The modes the selected control acts in (nil: every mode).
+    /// The modes the selected control works in (nil: every mode).
     private func setActsIn(_ modes: [String]?) {
         guard let id = selected, let i = index(of: id) else { return }
         profile.controls[i].modes = modes
         let control = profile.controls[i]
         let names = (modes ?? []).compactMap { mode in profile.modes.first { $0.id == mode }?.name }
-        setStatus(names.isEmpty ? String(localized: "“\(name(of: control))” acts in every mode.", bundle: .avoSharedKit)
-                                : String(localized: "“\(name(of: control))” acts in \(names.formatted(.list(type: .and))).", bundle: .avoSharedKit))
+        setStatus(names.isEmpty ? String(localized: "“\(name(of: control))” works in every mode.", bundle: .avoSharedKit)
+                                : String(localized: "“\(name(of: control))” works in \(names.formatted(.list(type: .and))).", bundle: .avoSharedKit))
         // Out of the mode being edited: it goes from view.
         if !control.belongs(to: editingMode) { selected = nil }
         needsDisplay = true
@@ -1576,7 +1576,7 @@ final class KeymapEditorView: NSView {
         return "\(prefix)-\(n)"
     }
 
-    /// Deletes a mode, with the controls that act only there and the
+    /// Deletes a mode, with the controls that work only there and the
     /// switches to it (a hotkey that only switched there goes too), once the
     /// player says so. The only mode: the layout is one set of controls
     /// again, and they all stay.
@@ -1593,7 +1593,7 @@ final class KeymapEditorView: NSView {
                      bundle: .avoSharedKit)
             : going.isEmpty
                 ? String(localized: "Its controls stay in the other modes. Cancel in the editor still undoes it.", bundle: .avoSharedKit)
-                : String(localized: "\(going.count) controls that act only there or switch to it go too. Cancel in the editor still undoes it.",
+                : String(localized: "\(going.count) controls that work only there or switch to it go too. Cancel in the editor still undoes it.",
                          bundle: .avoSharedKit)
         alert.addButton(withTitle: String(localized: "Delete Mode", bundle: .avoSharedKit))
         alert.addButton(withTitle: String(localized: "Cancel", bundle: .avoSharedKit))
@@ -1799,9 +1799,9 @@ final class KeymapEditorView: NSView {
         // What else it presses here, so a shared key is no surprise.
         let others = shownControls.filter { $0.id != control.id && $0.allTriggers.contains(trigger) }.map { "“\(name(of: $0))”" }
         if others.isEmpty {
-            setStatus(String(localized: "A tap on \(short(trigger)). Click the next button of the game and press its key.", bundle: .avoSharedKit))
+            setStatus(String(localized: "A tap on \(short(trigger)). Click the next button in the game and press its key.", bundle: .avoSharedKit))
         } else {
-            setStatus(String(localized: "A tap on \(short(trigger)), together with \(others.formatted(.list(type: .and))). Click the next button of the game and press its key.",
+            setStatus(String(localized: "A tap on \(short(trigger)), together with \(others.formatted(.list(type: .and))). Click the next button in the game and press its key.",
                              bundle: .avoSharedKit))
         }
         needsDisplay = true
@@ -2768,7 +2768,7 @@ final class KeymapEditorView: NSView {
 
     /// The bar's Templates menu.
     private func templateEntries() -> [HazeMenuEntry] {
-        [.note(String(localized: "Starting layouts: move each control onto the game's button afterwards", bundle: .avoSharedKit))]
+        [.note(String(localized: "Starting layouts: move each control onto the game’s button afterwards", bundle: .avoSharedKit))]
             + KeymapTemplate.allCases.map { template in
                 .item(HazeMenuItem(title: Self.title(of: template), symbol: Self.symbol(of: template)) { [weak self] in
                     self?.chooseTemplate(template)
@@ -2785,7 +2785,7 @@ final class KeymapEditorView: NSView {
         // Never throw the player's work away without asking.
         let alert = NSAlert()
         alert.messageText = String(localized: "Insert the \(Self.title(of: template)) template?", bundle: .avoSharedKit)
-        alert.informativeText = String(localized: "This layout already has controls. Add the template's controls next to them (keys you already use stay with your controls), or replace the layout with the template. Its positions are only a starting point, and Cancel in the editor still undoes everything.",
+        alert.informativeText = String(localized: "This layout already has controls. Add the template’s controls next to them (keys you already use stay with your controls), or replace the layout with the template. Its positions are only a starting point, and Cancel in the editor still undoes everything.",
                                        bundle: .avoSharedKit)
         alert.addButton(withTitle: String(localized: "Add to Layout", bundle: .avoSharedKit))
         alert.addButton(withTitle: String(localized: "Replace Layout", bundle: .avoSharedKit))
@@ -2819,7 +2819,7 @@ final class KeymapEditorView: NSView {
             pendingTap = nil
             hovered = nil
             drag = nil
-            var text = String(localized: "Inserted the \(Self.title(of: template)) template. Its positions are a starting point: drag each control onto the game's own button.",
+            var text = String(localized: "Inserted the \(Self.title(of: template)) template. Its positions are a starting point: drag each control onto the game’s own button.",
                               bundle: .avoSharedKit)
             if !insertion.unbound.isEmpty {
                 text += " " + String(localized: "Still without a key: \(insertion.unbound.count), because your controls already use theirs. Select each “?” and press a key.",

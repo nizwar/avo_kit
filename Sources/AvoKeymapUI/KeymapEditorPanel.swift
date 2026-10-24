@@ -1132,12 +1132,8 @@ private struct ActionsSection: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 4)
             if let passThrough {
-                Toggle(isOn: Binding(get: { passThrough }, set: { on in model.update { $0.setPassThrough(on) } })) { EmptyView() }
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                    .labelsHidden()
+                QuickCheckbox(label: L("Touch the game where clicked"), isOn: passThrough) { on in model.update { $0.setPassThrough(on) } }
                     .help(L("On: the click also touches the game there (its Close button). Off: it only does the actions."))
-                    .accessibilityLabel(Text(verbatim: L("Touch the game where clicked")))
             }
         }
         .foregroundStyle(off ? QuickHaze.textTertiary : QuickHaze.textSecondary)

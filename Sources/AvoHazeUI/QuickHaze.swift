@@ -389,27 +389,47 @@ public struct QuickToggle: View {
                 .onTapGesture { set(!isOn) }
                 .accessibilityHidden(true)
             Spacer(minLength: 8)
-            Button {
-                set(!isOn)
-            } label: {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(isOn ? QuickHaze.accent : Color.white.opacity(0.92))
-                        .frame(width: 18, height: 18)
-                    if isOn {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .heavy))
-                            .foregroundStyle(QuickHaze.onAccent)
-                    }
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text(verbatim: label))
-            .accessibilityValue(Text(verbatim: isOn ? L("On") : L("Off")))
-            .accessibilityHint(Text(verbatim: caption ?? ""))
-            .accessibilityAddTraits(.isToggle)
+            QuickCheckbox(label: label, caption: caption, isOn: isOn, set: set)
         }
+    }
+}
+
+/// The haze checkbox on its own, for a row that has its own name (a step
+/// of what a control does).
+public struct QuickCheckbox: View {
+    let label: String
+    var caption: String?
+    let isOn: Bool
+    let set: (Bool) -> Void
+
+    public init(label: String, caption: String? = nil, isOn: Bool, set: @escaping (Bool) -> Void) {
+        self.label = label
+        self.caption = caption
+        self.isOn = isOn
+        self.set = set
+    }
+
+    public var body: some View {
+        Button {
+            set(!isOn)
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(isOn ? QuickHaze.accent : Color.white.opacity(0.92))
+                    .frame(width: 18, height: 18)
+                if isOn {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(QuickHaze.onAccent)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(verbatim: label))
+        .accessibilityValue(Text(verbatim: isOn ? L("On") : L("Off")))
+        .accessibilityHint(Text(verbatim: caption ?? ""))
+        .accessibilityAddTraits(.isToggle)
     }
 }
 

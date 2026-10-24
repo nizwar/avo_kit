@@ -519,12 +519,30 @@
         }
       }
     },
-    "%lld controls that act only there or switch to it go too. Cancel in the editor still undoes it." : {
+    "%lld controls that work only there or switch to it go too. Cancel in the editor still undoes it." : {
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "One control that works only there or switches to it goes too. Cancel in the editor still undoes it."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld controls that work only there or switch to it go too. Cancel in the editor still undoes it."
+                }
+              }
+            }
+          }
+        },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld kontrol yang hanya aktif di sana atau beralih ke sana ikut terhapus. Batal di editor masih bisa mengurungkannya."
+            "value" : "%lld kontrol yang hanya bekerja di sana atau beralih ke sana ikut terhapus. Batal di editor masih bisa mengurungkannya."
           }
         }
       }
@@ -555,12 +573,12 @@
         }
       }
     },
-    "A click area needs no key: it acts when it is clicked while the mouse is free." : {
+    "A click area needs no key: it does its actions when clicked while the mouse is free." : {
       "localizations" : {
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Area klik tidak perlu tombol: ia bekerja saat diklik ketika mouse bebas."
+            "value" : "Area klik tidak perlu tombol: ia menjalankan aksinya saat diklik ketika mouse bebas."
           }
         }
       }
@@ -675,12 +693,12 @@
         }
       }
     },
-    "A tap on %@, together with %@. Click the next button of the game and press its key." : {
+    "A tap on %@, together with %@. Click the next button in the game and press its key." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "A tap on %1$@, together with %2$@. Click the next button of the game and press its key."
+            "value" : "A tap on %1$@, together with %2$@. Click the next button in the game and press its key."
           }
         },
         "id" : {
@@ -691,7 +709,7 @@
         }
       }
     },
-    "A tap on %@. Click the next button of the game and press its key." : {
+    "A tap on %@. Click the next button in the game and press its key." : {
       "localizations" : {
         "id" : {
           "stringUnit" : {
@@ -981,7 +999,7 @@
         }
       }
     },
-    "Click a button of the game, then press its key." : {
+    "Click a button in the game, then press its key." : {
       "localizations" : {
         "id" : {
           "stringUnit" : {
@@ -1957,7 +1975,7 @@
         }
       }
     },
-    "Inserted the %@ template. Its positions are a starting point: drag each control onto the game's own button." : {
+    "Inserted the %@ template. Its positions are a starting point: drag each control onto the game’s own button." : {
       "localizations" : {
         "id" : {
           "stringUnit" : {
@@ -2164,6 +2182,24 @@
             "state" : "translated",
             "value" : "Tidak disertakan: %lld (tata letak sudah punya mata, atau tombol D-pad sudah dipakai)."
           }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Left out: one (the layout already has an eye, or the D-pad keys are in use)."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Left out: %lld (the layout already has an eye, or the D-pad keys are in use)."
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -2173,6 +2209,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tidak disertakan: %lld ikatannya, untuk kontrol yang berubah atau sudah tidak ada."
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Left out: one of its bindings, for a control that changed or is gone."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Left out: %lld of its bindings, for controls that changed or are gone."
+                }
+              }
+            }
           }
         }
       }
@@ -3459,7 +3513,7 @@
         }
       }
     },
-    "Starting layouts: move each control onto the game's button afterwards" : {
+    "Starting layouts: move each control onto the game’s button afterwards" : {
       "localizations" : {
         "id" : {
           "stringUnit" : {
@@ -3505,6 +3559,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Belum punya tombol: %lld, karena tombolnya sudah dipakai kontrol Anda. Pilih tiap “?” lalu tekan sebuah tombol."
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Still without a key: one, because your controls already use its key. Select the “?” and press a key."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Still without a key: %lld, because your controls already use theirs. Select each “?” and press a key."
+                }
+              }
+            }
           }
         }
       }
@@ -3644,7 +3716,29 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "The controller is laid out as in %1$@ games: %2$lld controls. Cancel undoes it."
+            "value" : "The controller is laid out as in %1$@ games: %#@controls@. Cancel undoes it."
+          },
+          "substitutions" : {
+            "controls" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg control"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg controls"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "id" : {
@@ -3895,7 +3989,7 @@
         }
       }
     },
-    "This layout already has controls. Add the template's controls next to them (keys you already use stay with your controls), or replace the layout with the template. Its positions are only a starting point, and Cancel in the editor still undoes everything." : {
+    "This layout already has controls. Add the template’s controls next to them (keys you already use stay with your controls), or replace the layout with the template. Its positions are only a starting point, and Cancel in the editor still undoes everything." : {
       "localizations" : {
         "id" : {
           "stringUnit" : {
@@ -4493,32 +4587,6 @@
         }
       }
     },
-    "“%@” acts in %@." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "“%1$@” acts in %2$@."
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“%1$@” aktif di %2$@."
-          }
-        }
-      }
-    },
-    "“%@” acts in every mode." : {
-      "localizations" : {
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“%@” aktif di semua mode."
-          }
-        }
-      }
-    },
     "“%@” follows %@." : {
       "localizations" : {
         "en" : {
@@ -4611,6 +4679,32 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“%@” merespons %@."
+          }
+        }
+      }
+    },
+    "“%@” works in %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "“%1$@” works in %2$@."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%1$@” bekerja di %2$@."
+          }
+        }
+      }
+    },
+    "“%@” works in every mode." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” bekerja di semua mode."
           }
         }
       }
