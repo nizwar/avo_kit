@@ -236,8 +236,15 @@ final class KeymapEditorView: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for area in trackingAreas { removeTrackingArea(area) }
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeAlways, .inVisibleRect, .cursorUpdate],
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect, .cursorUpdate],
                                        owner: self, userInfo: nil))
+    }
+
+    // Gone into the panel beside the game, or out of the window: nothing is hovered.
+    override func mouseExited(with event: NSEvent) {
+        guard hovered != nil else { return }
+        hovered = nil
+        needsDisplay = true
     }
 
     // MARK: The panel beside the game (KeymapEditorPanel.swift)
@@ -271,6 +278,9 @@ final class KeymapEditorView: NSView {
         guard outside != panelOutside || panel.superview == nil else { return }
         NSLayoutConstraint.deactivate(panelInside)
         panel.removeFromSuperview()
+        // A drag from the panel does not survive its move.
+        paletteDrag = nil
+        padDrag = nil
         panelOutside = outside
         barModel.outside = outside
         if let host {
@@ -409,24 +419,33 @@ final class KeymapEditorView: NSView {
         }
     }
 
-    /// Keys come to the editor again after a click in the panel (not while
-    /// a mode's name is typed there).
+    /// Keys come to the editor again after a click in the panel: a mode's
+    /// name typed meanwhile is kept, and the app comes forward if another
+    /// was in front (the panel beside the game never brings it).
     private func refocus() {
-        guard let window, !typingInPanel else { return }
-        // The panel's own window took the keyboard for a field: the game's has it again.
-        if panelOutside, panel.window?.isKeyWindow == true { window.makeKey() }
+        if let id = barModel.renaming {
+            finishRenaming(id, barModel.renamingText)
+            return
+        }
+        guard let window else { return }
+        if window.isVisible {
+            if !NSApp.isActive { NSApp.activate() }
+            if !window.isKeyWindow { window.makeKey() }
+        }
         if window.firstResponder !== self { window.makeFirstResponder(self) }
     }
 
-    /// A mode's name has the keyboard in the panel.
+    /// A mode's name is being typed in the panel: a text field there has the
+    /// keyboard (not merely a button the keyboard can reach).
     private var typingInPanel: Bool {
-        (panel.window?.firstResponder as? NSView)?.isDescendant(of: panel) == true
+        guard let panelWindow = panel.window, panelWindow.isKeyWindow, let text = panelWindow.firstResponder as? NSText else { return false }
+        return text.isDescendant(of: panel)
     }
 
-    /// A mode's tab that waits for a name it never got the keyboard for
-    /// keeps its name (one being typed is kept as it loses the keyboard).
+    /// A key or click on the game while a mode's tab waits for its name:
+    /// the name as typed so far is kept.
     private func endStaleRenaming() {
-        if let id = barModel.renaming, !typingInPanel { finishRenaming(id, nil) }
+        if let id = barModel.renaming, !typingInPanel { finishRenaming(id, barModel.renamingText) }
     }
 
     private func showHintSettings() {
@@ -1383,7 +1402,7 @@ final class KeymapEditorView: NSView {
 
     /// + Mode: a new, empty mode, its name typed in its tab.
     private func addMode() {
-        barModel.renaming = createMode()
+        startRenaming(createMode())
     }
 
     /// A new, empty mode, edited from now on. The layout's first also makes
@@ -1418,7 +1437,21 @@ final class KeymapEditorView: NSView {
         return "mode-\(n)"
     }
 
-    /// The name typed in a mode's tab (nil: Esc, its name stays).
+    /// A mode's name is typed in its tab from now on: the panel takes the
+    /// keyboard for it (beside the game, its own window becomes the key one,
+    /// once the menu that asked has given the keyboard back).
+    private func startRenaming(_ id: String) {
+        barModel.renamingText = profile.modes.first { $0.id == id }?.name ?? ""
+        barModel.renaming = id
+        DispatchQueue.main.async { [weak self] in
+            guard let self, barModel.renaming == id, panelOutside, let side = panel.window, let window, window.isVisible else { return }
+            if !NSApp.isActive { NSApp.activate() }
+            side.makeKey()
+        }
+    }
+
+    /// The name typed in a mode's tab (nil: Esc, its name stays). The keys
+    /// are the editor's again.
     private func finishRenaming(_ id: String, _ name: String?) {
         guard barModel.renaming == id else { return }
         barModel.renaming = nil
@@ -1426,7 +1459,7 @@ final class KeymapEditorView: NSView {
            let i = profile.modes.firstIndex(where: { $0.id == id }) {
             profile.modes[i].name = name
         }
-        window?.makeFirstResponder(self)
+        refocus()
         needsDisplay = true
     }
 
@@ -1438,7 +1471,7 @@ final class KeymapEditorView: NSView {
         var entries: [HazeMenuEntry] = [
             .section(profile.modes[index].name),
             .item(HazeMenuItem(title: String(localized: "Rename", bundle: .avoSharedKit), symbol: "pencil") { [weak self] in
-                self?.barModel.renaming = id
+                self?.startRenaming(id)
             }),
             .item(HazeMenuItem(title: String(localized: "Duplicate", bundle: .avoSharedKit), symbol: "plus.square.on.square") { [weak self] in
                 self?.duplicateMode(id)
@@ -1510,7 +1543,7 @@ final class KeymapEditorView: NSView {
             selected = nil
             pendingTap = nil
             editingMode = copy
-            barModel.renaming = copy
+            startRenaming(copy)
             setStatus(String(localized: "A copy of “\(source.name)”, with its controls: type its name in its tab.", bundle: .avoSharedKit))
             needsDisplay = true
         }
@@ -1546,11 +1579,9 @@ final class KeymapEditorView: NSView {
                          bundle: .avoSharedKit)
         alert.addButton(withTitle: String(localized: "Delete Mode", bundle: .avoSharedKit))
         alert.addButton(withTitle: String(localized: "Cancel", bundle: .avoSharedKit))
-        alert.beginSheetModal(for: window) { [weak self] response in
-            MainActor.assumeIsolated {
-                if response == .alertFirstButtonReturn { self?.removeMode(id) }
-                self?.refocus()
-            }
+        ask(alert, over: window) { [weak self] response in
+            if response == .alertFirstButtonReturn { self?.removeMode(id) }
+            self?.refocus()
         }
     }
 
@@ -1806,6 +1837,8 @@ final class KeymapEditorView: NSView {
             paletteDrag = nil
             if takesDrop(at: p) { place(item, at: normalized(p)) }
             refocus()
+        case .cancelled:
+            paletteDrag = nil
         }
         needsDisplay = true
     }
@@ -2020,7 +2053,7 @@ final class KeymapEditorView: NSView {
                 }
                 select(id)
             }
-            barModel.renaming = mode
+            startRenaming(mode)
             setStatus(String(localized: "A new mode, and the switch to it: name the mode in its tab, then add its controls.", bundle: .avoSharedKit))
             needsDisplay = true
         }
@@ -2206,6 +2239,7 @@ final class KeymapEditorView: NSView {
             padHover = nil
             needsDisplay = true
         }
+        paletteDrag = nil
     }
 
     private func connectPanel() {
@@ -2283,6 +2317,8 @@ final class KeymapEditorView: NSView {
         case .ended:
             padDrag = nil
             dropped(element, at: p)
+        case .cancelled:
+            padDrag = nil
         }
         needsDisplay = true
     }
@@ -2590,15 +2626,13 @@ final class KeymapEditorView: NSView {
         alert.addButton(withTitle: String(localized: "Save Preset", bundle: .avoSharedKit))
         alert.addButton(withTitle: String(localized: "Cancel", bundle: .avoSharedKit))
         alert.window.initialFirstResponder = field
-        alert.beginSheetModal(for: window) { [weak self] response in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.window?.makeFirstResponder(self)
-                let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard response == .alertFirstButtonReturn, !name.isEmpty else { return }
-                self.profile.savePreset(named: name)
-                self.setStatus(String(localized: "Saved the preset “\(name)”.", bundle: .avoSharedKit))
-            }
+        ask(alert, over: window) { [weak self] response in
+            guard let self else { return }
+            refocus()
+            let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard response == .alertFirstButtonReturn, !name.isEmpty else { return }
+            profile.savePreset(named: name)
+            setStatus(String(localized: "Saved the preset “\(name)”.", bundle: .avoSharedKit))
         }
     }
 
@@ -2614,14 +2648,13 @@ final class KeymapEditorView: NSView {
                      bundle: .avoSharedKit)
         alert.addButton(withTitle: String(localized: "Reset", bundle: .avoSharedKit))
         alert.addButton(withTitle: String(localized: "Cancel", bundle: .avoSharedKit))
-        alert.beginSheetModal(for: window) { [weak self] response in
-            MainActor.assumeIsolated {
-                guard let self, response == .alertFirstButtonReturn else { return }
-                self.profile.removeGamepadMapping()
-                if let id = self.selected, !self.profile.controls.contains(where: { $0.id == id }) { self.selected = nil }
-                self.setStatus(String(localized: "The controller mapping is reset.", bundle: .avoSharedKit))
-                self.needsDisplay = true
-            }
+        ask(alert, over: window) { [weak self] response in
+            guard let self else { return }
+            refocus()
+            guard response == .alertFirstButtonReturn else { return }
+            profile.removeGamepadMapping()
+            setStatus(String(localized: "The controller mapping is reset.", bundle: .avoSharedKit))
+            needsDisplay = true
         }
     }
 
@@ -2739,14 +2772,13 @@ final class KeymapEditorView: NSView {
         alert.addButton(withTitle: String(localized: "Add to Layout", bundle: .avoSharedKit))
         alert.addButton(withTitle: String(localized: "Replace Layout", bundle: .avoSharedKit))
         alert.addButton(withTitle: String(localized: "Cancel", bundle: .avoSharedKit))
-        alert.beginSheetModal(for: window) { [weak self] response in
-            MainActor.assumeIsolated {
-                switch response {
-                case .alertFirstButtonReturn: self?.insert(template, replacing: false)
-                case .alertSecondButtonReturn: self?.insert(template, replacing: true)
-                default: break
-                }
+        ask(alert, over: window) { [weak self] response in
+            switch response {
+            case .alertFirstButtonReturn: self?.insert(template, replacing: false)
+            case .alertSecondButtonReturn: self?.insert(template, replacing: true)
+            default: break
             }
+            self?.refocus()
         }
     }
 
@@ -2790,6 +2822,7 @@ final class KeymapEditorView: NSView {
 
     /// Saves the profile and closes the editor; stays open on problems.
     @objc private func saveAndClose() {
+        guard !isAsking else { return }
         let problems = profile.validate()
         guard problems.isEmpty else {
             var message = problems.first ?? String(localized: "This profile has problems.", bundle: .avoSharedKit)
@@ -2868,8 +2901,9 @@ final class KeymapEditorView: NSView {
     @objc private func close() { onClose?() }
 
     /// Cancel, and ⇧⌘K again: the changes go only once the player says so
-    /// (none, and it just closes).
+    /// (none, and it just closes). Not while another question is up.
     func cancel() {
+        guard !isAsking else { return }
         guard profile != original, let window else {
             close()
             return
@@ -2882,8 +2916,24 @@ final class KeymapEditorView: NSView {
         alert.addButton(withTitle: String(localized: "Discard", bundle: .avoSharedKit)).hasDestructiveAction = true
         alert.buttons.first?.keyEquivalent = "\r"
         alert.buttons.last?.keyEquivalent = ""
-        alert.beginSheetModal(for: window) { [weak self] response in
+        ask(alert, over: window) { [weak self] response in
             if response == .alertSecondButtonReturn { self?.close() } else { self?.refocus() }
+        }
+    }
+
+    /// One of the editor's questions is up over the game.
+    var isAsking: Bool { window?.attachedSheet != nil || barModel.sheetUp }
+
+    /// Asks `alert` over the game's window, one question at a time: the
+    /// panel waits for the answer (its buttons would act behind it).
+    private func ask(_ alert: NSAlert, over window: NSWindow, then answer: @escaping @MainActor (NSApplication.ModalResponse) -> Void) {
+        guard !isAsking else { return }
+        barModel.sheetUp = true
+        alert.beginSheetModal(for: window) { [weak self] response in
+            MainActor.assumeIsolated {
+                self?.barModel.sheetUp = false
+                answer(response)
+            }
         }
     }
 }

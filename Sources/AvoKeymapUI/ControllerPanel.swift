@@ -23,7 +23,8 @@ private func L(_ key: String.LocalizationValue) -> String { String(localized: ke
 @MainActor
 final class ControllerPanelModel: ObservableObject {
     enum Tab: Hashable { case buttons, sticks, presets }
-    enum DragPhase { case moved, ended }
+    /// `cancelled`: SwiftUI dropped the drag; its ghost goes and nothing is bound.
+    enum DragPhase { case moved, ended, cancelled }
 
     @Published private(set) var info: GamepadHub.Info?
     @Published private(set) var reading = GamepadReading()
@@ -392,7 +393,8 @@ private struct SpotView: View {
     let spot: GamepadDiagram.Spot
     let scale: CGFloat
     @State private var hovering = false
-    @State private var dragging = false
+    /// Set while the part is dragged; reset by SwiftUI when the drag ends or is dropped.
+    @GestureState private var dragging = false
 
     var body: some View {
         let frame = spot.frame
@@ -421,14 +423,13 @@ private struct SpotView: View {
             }
             .help(help)
             .gesture(DragGesture(minimumDistance: 3, coordinateSpace: .named(ControllerPanelView.space))
-                .onChanged { drag in
-                    dragging = true
-                    model.drag(spot.element, .moved, drag.location)
-                }
-                .onEnded { drag in
-                    dragging = false
-                    model.drag(spot.element, .ended, drag.location)
-                })
+                .updating($dragging) { _, state, _ in state = true }
+                .onChanged { drag in model.drag(spot.element, .moved, drag.location) }
+                .onEnded { drag in model.drag(spot.element, .ended, drag.location) })
+            // Ended or dropped (the panel moved, a tab changed): its ghost goes.
+            .onChange(of: dragging) { _, now in
+                if !now { model.drag(spot.element, .cancelled, .zero) }
+            }
             .simultaneousGesture(TapGesture().onEnded { model.click(spot.element) })
             .accessibilityElement()
             .accessibilityLabel(Text(verbatim: model.name(spot.element)))

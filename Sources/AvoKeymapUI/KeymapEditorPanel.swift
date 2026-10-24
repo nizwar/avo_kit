@@ -149,7 +149,8 @@ enum KeymapPaletteItem: String, CaseIterable, Identifiable, Hashable {
 @MainActor
 final class KeymapEditorModel: ObservableObject {
     enum Tab: String, Hashable { case controls, controller }
-    enum DragPhase { case moved, ended }
+    /// A drag from the panel: `cancelled` when SwiftUI dropped the gesture (its ghost goes, nothing is placed).
+    enum DragPhase { case moved, ended, cancelled }
 
     struct Mode: Identifiable, Equatable {
         let id: String
@@ -188,8 +189,11 @@ final class KeymapEditorModel: ObservableObject {
     @Published var tab = Tab.controls
     @Published var modes: [Mode] = []
     @Published var editingMode: String?
-    /// The mode whose name is being typed in its tab.
+    /// The mode whose name is being typed in its tab, and the name as typed so far.
     @Published var renaming: String?
+    @Published var renamingText = ""
+    /// One of the editor's questions is up over the game: the panel waits for its answer.
+    @Published var sheetUp = false
     @Published var hasEye = false
     /// The scroll bars over the eye's area, which work only while the mouse is free.
     @Published var barsOverTheEye: Set<String> = []
@@ -303,6 +307,7 @@ struct KeymapEditorPanel: View {
         .overlay(alignment: .leading) {
             if !model.outside { Rectangle().fill(QuickHaze.text.opacity(0.12)).frame(width: 1) }
         }
+        .disabled(model.sheetUp)
         .environment(\.colorScheme, .dark)
         .coordinateSpace(name: Self.space)
         .coordinateSpace(name: ControllerPanelView.space)
@@ -593,7 +598,8 @@ private struct PaletteTile: View {
     @ObservedObject var model: KeymapEditorModel
     let item: KeymapPaletteItem
     @State private var hovering = false
-    @State private var dragging = false
+    /// Set while the tile is dragged; reset by SwiftUI when the drag ends or is dropped.
+    @GestureState private var dragging = false
 
     var body: some View {
         let lit = hovering
@@ -620,14 +626,13 @@ private struct PaletteTile: View {
         .help(item.help + "\n" + (item == .hotkey ? L("Click to add it: it shows in the list of controls, not on the game.")
                                                    : L("Click to add it, or drag it onto the game’s button.")))
         .gesture(DragGesture(minimumDistance: 3, coordinateSpace: .named(KeymapEditorPanel.space))
-            .onChanged { drag in
-                dragging = true
-                model.drag(item, .moved, drag.location)
-            }
-            .onEnded { drag in
-                dragging = false
-                model.drag(item, .ended, drag.location)
-            })
+            .updating($dragging) { _, state, _ in state = true }
+            .onChanged { drag in model.drag(item, .moved, drag.location) }
+            .onEnded { drag in model.drag(item, .ended, drag.location) })
+        // Ended or dropped (the panel moved, a tab changed): its ghost goes.
+        .onChange(of: dragging) { _, now in
+            if !now { model.drag(item, .cancelled, .zero) }
+        }
         .simultaneousGesture(TapGesture().onEnded { model.add(item) })
         .accessibilityElement()
         .accessibilityLabel(Text(verbatim: item.title))
@@ -645,12 +650,11 @@ private struct ModeTab: View {
     /// The game starts in it.
     let starts: Bool
     @State private var anchor = HazeMenuAnchorBox()
-    @State private var name = ""
     @FocusState private var typing: Bool
 
     var body: some View {
         if model.renaming == mode.id {
-            TextField(L("Name"), text: $name)
+            TextField(L("Name"), text: $model.renamingText)
                 .textFieldStyle(.plain)
                 .font(QuickHaze.mona(12.5, 600))
                 .foregroundStyle(QuickHaze.text)
@@ -660,14 +664,11 @@ private struct ModeTab: View {
                 .background(Capsule().fill(Color.black.opacity(0.45)))
                 .overlay(Capsule().strokeBorder(QuickHaze.accent, lineWidth: 1.5))
                 .focused($typing)
-                .onSubmit { model.rename(mode.id, name) }
+                .onSubmit { model.rename(mode.id, model.renamingText) }
                 .onExitCommand { model.rename(mode.id, nil) }
-                .onAppear {
-                    name = mode.name
-                    typing = true
-                }
+                .onAppear { typing = true }
                 .onChange(of: typing) { _, focused in
-                    if !focused { model.rename(mode.id, name) }
+                    if !focused { model.rename(mode.id, model.renamingText) }
                 }
                 .accessibilityLabel(Text(verbatim: L("The mode’s name")))
         } else {
