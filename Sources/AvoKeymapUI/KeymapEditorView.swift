@@ -14,11 +14,11 @@ import UniformTypeIdentifiers
 /// onto the game where one goes, and has the layout's modes and the
 /// selected control's keys, modes and settings. On the game: drag an
 /// object's body to move it, its ↘ handle to set how far it reaches, × to
-/// remove it. With an object selected the next key is its trigger, any key
-/// at all (Delete, Esc and the modifiers included, a modifier once it is
-/// let go on its own); right-click
-/// for mouse buttons and the wheel. ⌥ + arrow keys move the selected object
-/// and ⌥⇧ + arrow keys resize it. The eye is a swipe area with a point
+/// remove it. With an object selected the next key is its trigger (a
+/// modifier once it is let go on its own, never one held for a shortcut);
+/// Esc lets go of it and Delete removes it, so right-click binds them, as
+/// it binds mouse buttons and the wheel. ⌘Z undoes the last change. ⌥ +
+/// arrow keys move the selected object and ⌥⇧ + arrow keys resize it. The eye is a swipe area with a point
 /// (where its finger touches down): while it is selected, drag the area to
 /// move it, its edges and corners to resize it, the point to move it within.
 /// Positions and sizes are fractions of the display, so the layout follows
@@ -73,12 +73,27 @@ final class KeymapEditorView: NSView {
 
     private var profile: KeymapProfile {
         didSet {
+            rememberForUndo(oldValue)
+            // A control that is gone (a preset, an undo) is selected no more.
+            if let id = selected, index(of: id) == nil { selected = nil }
             refreshPanel()
             refreshBar()
         }
     }
     /// The layout as the editor opened with it: Cancel asks before changes go.
     private let original: KeymapProfile
+    /// The layout before each change, newest last, with the selection and
+    /// the mode of the moment: ⌘Z steps back.
+    private var undoSteps: [(profile: KeymapProfile, selected: String?, mode: String?)] = []
+    /// A drag on the game is one change, until the mouse is let go.
+    private var undoStepOpen = false
+    /// The event of the last change: its time and kind.
+    private var undoEvent: (time: TimeInterval, type: NSEvent.EventType)?
+    private var undoing = false
+    /// Inside `asOneChange`, and whether its step is taken already.
+    private var oneChange = 0
+    private var oneChangeStepTaken = false
+    private static let undoLimit = 50
     private var selected: String? {
         didSet {
             if selected != oldValue { zoneHeld = false }
@@ -791,16 +806,93 @@ final class KeymapEditorView: NSView {
     }
 
     private func remove(_ id: String) {
-        guard let index = index(of: id) else { return }
-        let control = profile.controls.remove(at: index)
-        if profile.fps?.aimControl == id { profile.fps = nil }
-        let gone = dropMouseActionsWithoutTheEye()
-        if let selected, selected == id || !profile.controls.contains(where: { $0.id == selected }) { self.selected = nil }
-        if gone.isEmpty {
-            setStatus(String(localized: "Removed “\(name(of: control))”.", bundle: .avoSharedKit))
-        } else {
-            setStatus(String(localized: "Removed “\(name(of: control))”, and what only locked or freed the mouse: \(gone.formatted(.list(type: .and))).",
-                             bundle: .avoSharedKit))
+        asOneChange {
+            guard let index = index(of: id) else { return }
+            let control = profile.controls.remove(at: index)
+            if profile.fps?.aimControl == id { profile.fps = nil }
+            let gone = dropMouseActionsWithoutTheEye()
+            if let selected, selected == id || !profile.controls.contains(where: { $0.id == selected }) { self.selected = nil }
+            if gone.isEmpty {
+                setStatus(String(localized: "Removed “\(name(of: control))”. ⌘Z brings it back.", bundle: .avoSharedKit))
+            } else {
+                setStatus(String(localized: "Removed “\(name(of: control))”, and what only locked or freed the mouse: \(gone.formatted(.list(type: .and))).",
+                                 bundle: .avoSharedKit))
+            }
+            needsDisplay = true
+        }
+    }
+
+    // MARK: Undo
+
+    /// Called with the layout as it was before each change: a new step,
+    /// unless the change belongs to the one before.
+    private func rememberForUndo(_ before: KeymapProfile) {
+        guard !undoing, before != profile, !(oneChange > 0 && oneChangeStepTaken) else { return }
+        if oneChange > 0 { oneChangeStepTaken = true }
+        guard !joinsLastUndoStep(NSApp.currentEvent) else { return }
+        undoSteps.append((before, selected, editingMode))
+        if undoSteps.count > Self.undoLimit { undoSteps.removeFirst() }
+        undoStepOpen = drag != nil
+    }
+
+    /// The changes `body` makes are one step for ⌘Z.
+    @discardableResult
+    private func asOneChange<T>(_ body: () -> T) -> T {
+        if oneChange == 0 { oneChangeStepTaken = false }
+        oneChange += 1
+        defer { oneChange -= 1 }
+        return body()
+    }
+
+    /// Whether the change made now is part of the last one: the rest of a
+    /// drag on the game, more of the same event, the rest of a slider's drag
+    /// in the panel, a key held down.
+    private func joinsLastUndoStep(_ event: NSEvent?) -> Bool {
+        defer { if let event { undoEvent = (event.timestamp, event.type) } }
+        if undoStepOpen { return true }
+        guard let event, let last = undoEvent else { return false }
+        if event.timestamp == last.time { return true }
+        if event.type == .leftMouseDragged, [.leftMouseDown, .leftMouseDragged].contains(last.type), event.timestamp - last.time < 0.5 {
+            return true
+        }
+        return event.type == .keyDown && event.isARepeat
+    }
+
+    /// ⌘Z: the layout as it was before the last change.
+    func undo() {
+        undoStepOpen = false
+        guard let step = undoSteps.popLast() else {
+            setStatus(String(localized: "Nothing to undo.", bundle: .avoSharedKit))
+            return
+        }
+        undoing = true
+        profile = step.profile
+        undoing = false
+        drag = nil
+        pendingTap = nil
+        editingMode = step.mode.flatMap { mode in profile.modes.contains { $0.id == mode } ? mode : nil } ?? profile.firstMode
+        selected = step.selected.flatMap { id in index(of: id) == nil ? nil : id }
+        setStatus(String(localized: "Undone.", bundle: .avoSharedKit))
+        needsDisplay = true
+    }
+
+    /// Edit › Undo, from the menu bar.
+    @objc func undo(_ sender: Any?) { undo() }
+
+    /// Esc: the tap waiting for its key goes, else the selection; Delete
+    /// removes the selected control. Either is a control's key from its menus.
+    private func letGo(removing: Bool) {
+        if pendingTap != nil {
+            pendingTap = nil
+            showHelp()
+        } else if let id = selected {
+            if removing {
+                remove(id)
+            } else {
+                selected = nil
+                setStatus(String(localized: "Esc lets go of the control. To make Esc or Delete a control’s key, right-click the control.",
+                                 bundle: .avoSharedKit))
+            }
         }
         needsDisplay = true
     }
@@ -1076,6 +1168,8 @@ final class KeymapEditorView: NSView {
            let area = profile.controls.first(where: { $0.id == id })?.area {
             setStatus(KeymapPainter.sizeText(area))
         }
+        // The drag was one change: one ⌘Z undoes it.
+        undoStepOpen = false
         drag = nil
         dragPoint = nil
         needsDisplay = true
@@ -1177,7 +1271,8 @@ final class KeymapEditorView: NSView {
         HazeMenuPresenter.shared.popUpContextMenu(menu, with: event, for: self)
     }
 
-    /// A mouse button or the wheel for a control, as the menus list them.
+    /// A mouse button or the wheel for a control, as the menus list them,
+    /// and the keys the editor keeps for itself (Esc lets go, Delete removes).
     static var mouseChoices: [(title: String, trigger: Trigger, symbol: String)] {
         [
             (String(localized: "Left Click", bundle: .avoSharedKit), .mouse(.left), "cursorarrow.click"),
@@ -1187,6 +1282,8 @@ final class KeymapEditorView: NSView {
             (String(localized: "Mouse Button 5", bundle: .avoSharedKit), .mouse(.button5), "arrow.forward.circle"),
             (String(localized: "Wheel Up", bundle: .avoSharedKit), .scrollUp, "arrow.up.circle"),
             (String(localized: "Wheel Down", bundle: .avoSharedKit), .scrollDown, "arrow.down.circle"),
+            (String(localized: "Esc Key", bundle: .avoSharedKit), .key(.escape), "escape"),
+            (String(localized: "Delete Key", bundle: .avoSharedKit), .key(.delete), "delete.left"),
         ]
     }
 
@@ -1270,22 +1367,24 @@ final class KeymapEditorView: NSView {
     /// them. Returns its id.
     @discardableResult
     private func createMode() -> String {
-        let first = profile.modes.isEmpty
-        if first {
-            profile.modes = [KeymapMode(id: "default", name: String(localized: "Default", bundle: .avoSharedKit))]
-            for i in profile.controls.indices where profile.controls[i].modes == nil && !isEye(profile.controls[i]) {
-                profile.controls[i].modes = ["default"]
+        return asOneChange {
+            let first = profile.modes.isEmpty
+            if first {
+                profile.modes = [KeymapMode(id: "default", name: String(localized: "Default", bundle: .avoSharedKit))]
+                for i in profile.controls.indices where profile.controls[i].modes == nil && !isEye(profile.controls[i]) {
+                    profile.controls[i].modes = ["default"]
+                }
             }
+            let id = newModeID()
+            profile.modes.append(KeymapMode(id: id, name: String(localized: "Mode \(profile.modes.count + 1)", bundle: .avoSharedKit)))
+            selected = nil
+            pendingTap = nil
+            editingMode = id
+            setStatus(first ? String(localized: "Your controls are in “Default” now. This new mode starts empty.", bundle: .avoSharedKit)
+                            : String(localized: "A new mode, empty: add its controls.", bundle: .avoSharedKit))
+            needsDisplay = true
+            return id
         }
-        let id = newModeID()
-        profile.modes.append(KeymapMode(id: id, name: String(localized: "Mode \(profile.modes.count + 1)", bundle: .avoSharedKit)))
-        selected = nil
-        pendingTap = nil
-        editingMode = id
-        setStatus(first ? String(localized: "Your controls are in “Default” now. This new mode starts empty.", bundle: .avoSharedKit)
-                        : String(localized: "A new mode, empty: add its controls.", bundle: .avoSharedKit))
-        needsDisplay = true
-        return id
     }
 
     private func newModeID() -> String {
@@ -1363,31 +1462,33 @@ final class KeymapEditorView: NSView {
     /// A copy of a mode, after it: its own controls copied, the others (the
     /// eye among them) acting in the copy too; its name typed in its tab.
     private func duplicateMode(_ id: String) {
-        guard let index = profile.modes.firstIndex(where: { $0.id == id }) else { return }
-        let source = profile.modes[index]
-        let copy = newModeID()
-        profile.modes.insert(KeymapMode(id: copy, name: String(localized: "\(source.name) Copy", bundle: .avoSharedKit), mouseLook: source.mouseLook),
-                             at: index + 1)
-        var controls = profile.controls
-        for i in controls.indices {
-            guard var modes = controls[i].modes, modes.contains(id) else { continue }
-            if modes == [id], !isEye(controls[i]) {
-                var twin = controls[i]
-                twin.id = uniqueID(like: twin.id, in: controls)
-                twin.modes = [copy]
-                controls.append(twin)
-            } else {
-                modes.append(copy)
-                controls[i].modes = profile.modes.map(\.id).filter(modes.contains)
+        asOneChange {
+            guard let index = profile.modes.firstIndex(where: { $0.id == id }) else { return }
+            let source = profile.modes[index]
+            let copy = newModeID()
+            profile.modes.insert(KeymapMode(id: copy, name: String(localized: "\(source.name) Copy", bundle: .avoSharedKit), mouseLook: source.mouseLook),
+                                 at: index + 1)
+            var controls = profile.controls
+            for i in controls.indices {
+                guard var modes = controls[i].modes, modes.contains(id) else { continue }
+                if modes == [id], !isEye(controls[i]) {
+                    var twin = controls[i]
+                    twin.id = uniqueID(like: twin.id, in: controls)
+                    twin.modes = [copy]
+                    controls.append(twin)
+                } else {
+                    modes.append(copy)
+                    controls[i].modes = profile.modes.map(\.id).filter(modes.contains)
+                }
             }
+            profile.controls = controls
+            selected = nil
+            pendingTap = nil
+            editingMode = copy
+            barModel.renaming = copy
+            setStatus(String(localized: "A copy of “\(source.name)”, with its controls: type its name in its tab.", bundle: .avoSharedKit))
+            needsDisplay = true
         }
-        profile.controls = controls
-        selected = nil
-        pendingTap = nil
-        editingMode = copy
-        barModel.renaming = copy
-        setStatus(String(localized: "A copy of “\(source.name)”, with its controls: type its name in its tab.", bundle: .avoSharedKit))
-        needsDisplay = true
     }
 
     /// A free id like `id`: "tap-3" gives the first free "tap-n".
@@ -1436,27 +1537,29 @@ final class KeymapEditorView: NSView {
     }
 
     private func removeMode(_ id: String) {
-        // Switches to it go, and what did only that.
-        let gone: Set<String> = profile.modes.count == 1 ? Set(profile.modes.map(\.id)) : [id]
-        profile.controls.removeAll { Self.onlySwitches($0, to: gone) }
-        for i in profile.controls.indices {
-            profile.controls[i].actions.removeAll { if case .switchMode(let mode) = $0 { gone.contains(mode) } else { false } }
+        asOneChange {
+            // Switches to it go, and what did only that.
+            let gone: Set<String> = profile.modes.count == 1 ? Set(profile.modes.map(\.id)) : [id]
+            profile.controls.removeAll { Self.onlySwitches($0, to: gone) }
+            for i in profile.controls.indices {
+                profile.controls[i].actions.removeAll { if case .switchMode(let mode) = $0 { gone.contains(mode) } else { false } }
+            }
+            if profile.modes.count == 1 {
+                profile.modes = []
+                for i in profile.controls.indices { profile.controls[i].modes = nil }
+            } else {
+                profile.controls.removeAll { $0.modes == [id] }
+                for i in profile.controls.indices { profile.controls[i].modes?.removeAll { $0 == id } }
+                profile.modes.removeAll { $0.id == id }
+            }
+            if let fps = profile.fps, !profile.controls.contains(where: { $0.id == fps.aimControl }) { profile.fps = nil }
+            dropMouseActionsWithoutTheEye()
+            selected = nil
+            pendingTap = nil
+            if editingMode == id || profile.modes.isEmpty { editingMode = profile.firstMode }
+            showHelp()
+            needsDisplay = true
         }
-        if profile.modes.count == 1 {
-            profile.modes = []
-            for i in profile.controls.indices { profile.controls[i].modes = nil }
-        } else {
-            profile.controls.removeAll { $0.modes == [id] }
-            for i in profile.controls.indices { profile.controls[i].modes?.removeAll { $0 == id } }
-            profile.modes.removeAll { $0.id == id }
-        }
-        if let fps = profile.fps, !profile.controls.contains(where: { $0.id == fps.aimControl }) { profile.fps = nil }
-        dropMouseActionsWithoutTheEye()
-        selected = nil
-        pendingTap = nil
-        if editingMode == id || profile.modes.isEmpty { editingMode = profile.firstMode }
-        showHelp()
-        needsDisplay = true
     }
 
     @objc private func assignFromMenu(_ item: NSMenuItem) {
@@ -1545,7 +1648,32 @@ final class KeymapEditorView: NSView {
         pendingModifier = nil
         guard selected != nil || pendingTap != nil else { return }
         if selected != nil, nudge(key, flags: event.modifierFlags) { return }
-        if !event.isARepeat { assign(.key(key)) }
+        guard !event.isARepeat else { return }
+        switch key {
+        // What players expect of them in an editor; their menus bind them.
+        case .escape: letGo(removing: false)
+        case .delete, .forwardDelete: letGo(removing: true)
+        default: assign(.key(key))
+        }
+    }
+
+    /// A shortcut (⌘G, ⇧⌘S): the menus', and the modifier held for it is no
+    /// key of its own. ⌘Z undoes the last change.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        pendingModifier = nil
+        if event.type == .keyDown, !typingInPanel, isEditorKey(event),
+           event.modifierFlags.intersection([.shift, .control, .option, .command]) == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "z" {
+            undo()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    /// The editor's window has the keyboard, so the key is the editor's.
+    private func isEditorKey(_ event: NSEvent) -> Bool {
+        guard let window else { return false }
+        return event.window === window || event.window == nil
     }
 
     override func flagsChanged(with event: NSEvent) {
@@ -1554,15 +1682,19 @@ final class KeymapEditorView: NSView {
             return
         }
         let pressed = Self.isPressed(key, in: event.modifierFlags)
+        let held = [NSEvent.ModifierFlags.shift, .control, .option, .command].filter(event.modifierFlags.contains).count
         if key == .capsLock {
             // It locks on one press and unlocks on the next: bound as it locks.
             if pressed { assign(.key(key)) }
         } else if pressed {
-            // Bound once let go on its own: ⌥ + arrow keys move the object instead.
-            pendingModifier = key
-        } else if pendingModifier == key {
+            // Bound once let go on its own: ⌥ + arrow keys move the object
+            // instead, and two held together are a shortcut's (⇧⌘S), never a key.
+            pendingModifier = held == 1 ? key : nil
+        } else if pendingModifier == key, held == 0 {
             pendingModifier = nil
             assign(.key(key))
+        } else {
+            pendingModifier = nil
         }
     }
 
@@ -1698,26 +1830,28 @@ final class KeymapEditorView: NSView {
     /// The layout's one eye: the one there (selected, and brought to this
     /// mode), or a new one around where it was let go, in every mode.
     private func addEye(at p: NormalizedPoint?) {
-        if let eye = profile.controls.first(where: isEye) {
-            if !eye.belongs(to: editingMode), let i = index(of: eye.id) { profile.controls[i].modes = nil }
-            selected = nil
-            select(eye.id)
-            setStatus(String(localized: "There is one eye per layout; this is it.", bundle: .avoSharedKit))
-            needsDisplay = true
-            return
+        asOneChange {
+            if let eye = profile.controls.first(where: isEye) {
+                if !eye.belongs(to: editingMode), let i = index(of: eye.id) { profile.controls[i].modes = nil }
+                selected = nil
+                select(eye.id)
+                setStatus(String(localized: "There is one eye per layout; this is it.", bundle: .avoSharedKit))
+                needsDisplay = true
+                return
+            }
+            // Most of the right side at full height: the finger swipes far before it starts over.
+            var area = Control.defaultEyeArea
+            if let p { area = area.offsetBy(dx: p.x - area.center.x, dy: p.y - area.center.y) }
+            add(.aim(area: area, sensitivity: AxisPair(x: 1, y: 1), adsSensitivity: AxisPair(x: 0.6, y: 0.6), exponent: 1, deadzone: 0,
+                     invertY: false, stick: .right), prefix: "eye", exactly: true)
+            guard let eye = profile.controls.last, let i = index(of: eye.id) else { return }
+            // A game turns its camera in all of its modes.
+            profile.controls[i].modes = nil
+            let toggle = FPSSettings.defaultCursorToggle
+            let taken = profile.controls.contains { $0.id != eye.id && $0.allTriggers.contains(toggle) }
+            profile.fps = FPSSettings(cursorToggle: taken ? .key(.grave) : toggle, aimControl: eye.id)
+            prompt(for: eye)
         }
-        // Most of the right side at full height: the finger swipes far before it starts over.
-        var area = Control.defaultEyeArea
-        if let p { area = area.offsetBy(dx: p.x - area.center.x, dy: p.y - area.center.y) }
-        add(.aim(area: area, sensitivity: AxisPair(x: 1, y: 1), adsSensitivity: AxisPair(x: 0.6, y: 0.6), exponent: 1, deadzone: 0,
-                 invertY: false, stick: .right), prefix: "eye", exactly: true)
-        guard let eye = profile.controls.last, let i = index(of: eye.id) else { return }
-        // A game turns its camera in all of its modes.
-        profile.controls[i].modes = nil
-        let toggle = FPSSettings.defaultCursorToggle
-        let taken = profile.controls.contains { $0.id != eye.id && $0.allTriggers.contains(toggle) }
-        profile.fps = FPSSettings(cursorToggle: taken ? .key(.grave) : toggle, aimControl: eye.id)
-        prompt(for: eye)
     }
 
     /// A click area about a button's size around where it was let go (the
@@ -1847,20 +1981,22 @@ final class KeymapEditorView: NSView {
     /// A new mode, and the switch to it on the selected control, which stays
     /// in view: the new mode's name is typed in its tab.
     private func addSwitchToNewMode() {
-        guard let id = selected else { return }
-        let from = editingMode
-        let mode = createMode()
-        // The control acted where the player was: there it stays edited, and selected.
-        editingMode = from ?? profile.firstMode
-        if let i = index(of: id) {
-            if profile.controls[i].modes == nil || profile.controls[i].belongs(to: editingMode) {
-                profile.controls[i].actions.append(.switchMode(mode))
+        asOneChange {
+            guard let id = selected else { return }
+            let from = editingMode
+            let mode = createMode()
+            // The control acted where the player was: there it stays edited, and selected.
+            editingMode = from ?? profile.firstMode
+            if let i = index(of: id) {
+                if profile.controls[i].modes == nil || profile.controls[i].belongs(to: editingMode) {
+                    profile.controls[i].actions.append(.switchMode(mode))
+                }
+                select(id)
             }
-            select(id)
+            barModel.renaming = mode
+            setStatus(String(localized: "A new mode, and the switch to it: name the mode in its tab, then add its controls.", bundle: .avoSharedKit))
+            needsDisplay = true
         }
-        barModel.renaming = mode
-        setStatus(String(localized: "A new mode, and the switch to it: name the mode in its tab, then add its controls.", bundle: .avoSharedKit))
-        needsDisplay = true
     }
 
     /// The modes the switch at `index` of the selected control may go to instead.
@@ -1917,14 +2053,16 @@ final class KeymapEditorView: NSView {
     }
 
     @objc private func removeAll() {
-        profile.controls.removeAll()
-        profile.fps = nil
-        profile.modes = []
-        selected = nil
-        pendingTap = nil
-        editingMode = nil
-        showHelp()
-        needsDisplay = true
+        asOneChange {
+            profile.controls.removeAll()
+            profile.fps = nil
+            profile.modes = []
+            selected = nil
+            pendingTap = nil
+            editingMode = nil
+            showHelp()
+            needsDisplay = true
+        }
     }
 
     // MARK: Drawing
@@ -2615,35 +2753,37 @@ final class KeymapEditorView: NSView {
     }
 
     private func insert(_ template: KeymapTemplate, replacing: Bool) {
-        let rect = displayRect()
-        let before = Set(profile.controls.map(\.id))
-        let insertion = template.insert(into: profile, replacing: replacing, aspect: rect.height > 0 ? rect.width / rect.height : 16.0 / 9.0)
-        profile = insertion.profile
-        if replacing {
-            // A layout of its own, without the old one's modes.
-            editingMode = profile.firstMode
-        } else if let editingMode {
-            // The new controls act in the mode being edited; an eye, as always, in every mode.
-            for i in profile.controls.indices where !before.contains(profile.controls[i].id) && !isEye(profile.controls[i]) {
-                profile.controls[i].modes = [editingMode]
+        asOneChange {
+            let rect = displayRect()
+            let before = Set(profile.controls.map(\.id))
+            let insertion = template.insert(into: profile, replacing: replacing, aspect: rect.height > 0 ? rect.width / rect.height : 16.0 / 9.0)
+            profile = insertion.profile
+            if replacing {
+                // A layout of its own, without the old one's modes.
+                editingMode = profile.firstMode
+            } else if let editingMode {
+                // The new controls act in the mode being edited; an eye, as always, in every mode.
+                for i in profile.controls.indices where !before.contains(profile.controls[i].id) && !isEye(profile.controls[i]) {
+                    profile.controls[i].modes = [editingMode]
+                }
             }
+            selected = nil
+            pendingTap = nil
+            hovered = nil
+            drag = nil
+            var text = String(localized: "Inserted the \(Self.title(of: template)) template. Its positions are a starting point: drag each control onto the game's own button.",
+                              bundle: .avoSharedKit)
+            if !insertion.unbound.isEmpty {
+                text += " " + String(localized: "Still without a key: \(insertion.unbound.count), because your controls already use theirs. Select each “?” and press a key.",
+                                     bundle: .avoSharedKit)
+            }
+            if !insertion.skipped.isEmpty {
+                text += " " + String(localized: "Left out: \(insertion.skipped.count) (the layout already has an eye, or the D-pad keys are in use).",
+                                     bundle: .avoSharedKit)
+            }
+            setStatus(text, problem: !insertion.unbound.isEmpty || !insertion.skipped.isEmpty)
+            needsDisplay = true
         }
-        selected = nil
-        pendingTap = nil
-        hovered = nil
-        drag = nil
-        var text = String(localized: "Inserted the \(Self.title(of: template)) template. Its positions are a starting point: drag each control onto the game's own button.",
-                          bundle: .avoSharedKit)
-        if !insertion.unbound.isEmpty {
-            text += " " + String(localized: "Still without a key: \(insertion.unbound.count), because your controls already use theirs. Select each “?” and press a key.",
-                                 bundle: .avoSharedKit)
-        }
-        if !insertion.skipped.isEmpty {
-            text += " " + String(localized: "Left out: \(insertion.skipped.count) (the layout already has an eye, or the D-pad keys are in use).",
-                                 bundle: .avoSharedKit)
-        }
-        setStatus(text, problem: !insertion.unbound.isEmpty || !insertion.skipped.isEmpty)
-        needsDisplay = true
     }
 
     private func short(_ trigger: Trigger) -> String { trigger.shortLabel }

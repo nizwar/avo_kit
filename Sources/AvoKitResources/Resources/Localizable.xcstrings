@@ -1287,6 +1287,16 @@
         }
       }
     },
+    "Delete Key" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tombol Delete"
+          }
+        }
+      }
+    },
     "Delete Mode" : {
       "localizations" : {
         "id" : {
@@ -1483,6 +1493,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Opasitas editor"
+          }
+        }
+      }
+    },
+    "Esc Key" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tombol Esc"
+          }
+        }
+      }
+    },
+    "Esc lets go of the control. To make Esc or Delete a control’s key, right-click the control." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esc melepas pilihan kontrol. Untuk menjadikan Esc atau Delete tombol sebuah kontrol, klik kanan kontrol itu."
           }
         }
       }
@@ -2607,6 +2637,16 @@
         }
       }
     },
+    "Nothing to undo." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak ada yang bisa dibatalkan."
+          }
+        }
+      }
+    },
     "Off" : {
       "localizations" : {
         "id" : {
@@ -2959,12 +2999,12 @@
         }
       }
     },
-    "Removed “%@”." : {
+    "Removed “%@”. ⌘Z brings it back." : {
       "localizations" : {
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“%@” dihapus."
+            "value" : "“%@” dihapus. ⌘Z mengembalikannya."
           }
         }
       }
@@ -3941,6 +3981,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Jenis"
+          }
+        }
+      }
+    },
+    "Undone." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dibatalkan."
           }
         }
       }
