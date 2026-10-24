@@ -123,6 +123,24 @@ public struct NormalizedRect: Hashable, Sendable, Codable {
         let x = max(min(dx, 1 - maxX), -minX), y = max(min(dy, 1 - maxY), -minY)
         return NormalizedRect(minX + x, minY + y, maxX + x, maxY + y)
     }
+
+    /// Whether the line from `a` to `b` touches the rectangle anywhere along its way.
+    public func touches(from a: NormalizedPoint, to b: NormalizedPoint) -> Bool {
+        // The part of the line inside each side's half of the plane, as fractions of the way.
+        var enter = 0.0, leave = 1.0
+        let dx = b.x - a.x, dy = b.y - a.y
+        for (p, q) in [(-dx, a.x - minX), (dx, maxX - a.x), (-dy, a.y - minY), (dy, maxY - a.y)] {
+            if p == 0 {
+                if q < 0 { return false }
+            } else if p < 0 {
+                enter = max(enter, q / p)
+            } else {
+                leave = min(leave, q / p)
+            }
+            if enter > leave { return false }
+        }
+        return true
+    }
 }
 
 public struct AxisPair: Hashable, Sendable, Codable {
@@ -718,6 +736,20 @@ extension Control {
     public var isVerticalScrollBar: Bool {
         guard case let .scrollBar(from, to, _, _) = kind else { return false }
         return abs(to.y - from.y) >= abs(to.x - from.x)
+    }
+}
+
+extension KeymapProfile {
+    /// The scroll bars whose track crosses the eye's swipe area (FPS mode).
+    /// They work only while the mouse is free (KeymapEngine): while it aims,
+    /// the wheel's drag there would turn the camera, which a swipe may not
+    /// do either (no recoil compensation).
+    public var scrollBarsOverTheAimArea: Set<String> {
+        guard let id = fps?.aimControl, let area = controls.first(where: { $0.id == id })?.fingerArea else { return [] }
+        return Set(controls.compactMap { control in
+            guard case let .scrollBar(from, to, _, _) = control.kind, area.touches(from: from, to: to) else { return nil }
+            return control.id
+        })
     }
 }
 

@@ -140,6 +140,8 @@ public struct KeymapEngine: Sendable {
     /// turned it, so only the last notch's release lets go.
     private var bars: [String: Double] = [:]
     private var barTurns: [String: Int] = [:]
+    /// The scroll bars that work only while the mouse is free (`KeymapProfile.scrollBarsOverTheAimArea`).
+    private let barsOverTheAimArea: Set<String>
     /// How long a scroll bar's finger stays down after the wheel's last notch.
     static let scrollReleaseSeconds = 0.2
     /// How long it takes to drag the thumb back to its rest point.
@@ -158,12 +160,25 @@ public struct KeymapEngine: Sendable {
     private var stickRestingSince: [String: TimeInterval] = [:]
     private var lastTick: TimeInterval?
 
-    public init(profile: KeymapProfile, displayID: UInt32, width: Double, height: Double) {
+    /// `continuing`: the engine the window used until now, for a layout
+    /// saved or loaded while the game runs. The game is where it was, so the
+    /// layout stays in its mode (if it still has it) and each scroll bar whose
+    /// track did not change keeps its thumb where the old engine left it.
+    public init(profile: KeymapProfile, displayID: UInt32, width: Double, height: Double, continuing old: KeymapEngine? = nil) {
         self.profile = profile
         self.displayID = displayID
         self.width = width
         self.height = height
         mode = profile.firstMode
+        barsOverTheAimArea = profile.scrollBarsOverTheAimArea
+        guard let old else { return }
+        if let kept = old.mode, profile.modes.contains(where: { $0.id == kept }) { mode = kept }
+        for control in profile.controls {
+            guard case let .scrollBar(from, to, _, _) = control.kind, let position = old.bars[control.id],
+                  let before = old.profile.controls.first(where: { $0.id == control.id }),
+                  case let .scrollBar(oldFrom, oldTo, _, _) = before.kind, oldFrom == from, oldTo == to else { continue }
+            bars[control.id] = position
+        }
     }
 
     // MARK: Public API
@@ -286,6 +301,9 @@ public struct KeymapEngine: Sendable {
 
     /// Lifts every touch (window lost focus, profile switched).
     public mutating func reset() -> [TouchEvent] {
+        // A scroll bar's thumb is let go where it was dragged to, where the
+        // engine believes it is, not partway through the glide.
+        for control in controls { settleBar(control) }
         schedule.removeAll()
         pressed.removeAll()
         held.removeAll()
@@ -320,6 +338,7 @@ public struct KeymapEngine: Sendable {
             case .tap where control.layer == nil, .hold where control.layer == nil: continue
             default: break
             }
+            settleBar(control)
             lift(touchID)
             held[controlID] = nil
             anchors[controlID] = nil
@@ -414,6 +433,8 @@ public struct KeymapEngine: Sendable {
         guard profile.fps != nil else { return true }
         // Aimed at the cursor, which is hidden and parked while the mouse is locked.
         if control.followsCursor, pointerLocked { return false }
+        // Over the camera, the wheel's drag would turn it while the mouse aims.
+        if pointerLocked, barsOverTheAimArea.contains(control.id) { return false }
         guard let layer = control.layer else { return true }
         return pointerLocked ? layer == .locked : layer == .cursor
     }
@@ -494,10 +515,13 @@ public struct KeymapEngine: Sendable {
         mode = target
         output.mode = target
         for (controlID, touchID) in held {
-            guard let control = controls.first(where: { $0.id == controlID }), !isActive(control) else { continue }
+            guard let control = controls.first(where: { $0.id == controlID }) else { continue }
             switch control.kind {
             case .tap, .hold: continue
-            default: break
+            // The new mode's scroll bars start from their rest points, so a
+            // finger still down from the wheel lets go, even of a bar of both modes.
+            case .scrollBar: settleBar(control)
+            default: guard !isActive(control) else { continue }
             }
             lift(touchID)
             held[controlID] = nil
@@ -510,7 +534,6 @@ public struct KeymapEngine: Sendable {
         for control in controls where isActive(control) {
             if case .dpad = control.kind { updateDPad(control, smoothly: false) }
         }
-        // The new mode's scroll bars start from their rest points.
         for control in controls { if case .scrollBar = control.kind { bars[control.id] = nil } }
         if let look = entered.mouseLook { lockPointer(look, output: &output) }
     }
@@ -660,6 +683,15 @@ public struct KeymapEngine: Sendable {
         let turn = (barTurns[control.id] ?? 0) + 1
         barTurns[control.id] = turn
         enqueue(now + release, .barRelease(control: control.id, generation: turn))
+    }
+
+    /// A scroll bar's finger, if it is down, goes the rest of the way to
+    /// where the wheel dragged the thumb: what lifts it next (focus lost, a
+    /// resize, the mouse locked, a new mode) lets go of the thumb where the
+    /// engine believes it is, so the next notch touches it there.
+    private mutating func settleBar(_ control: Control) {
+        guard case .scrollBar = control.kind, let touch = held[control.id], let glide = glides.removeValue(forKey: control.id) else { return }
+        move(touch, x: glide.targetX, y: glide.targetY)
     }
 
     // MARK: Click zones
