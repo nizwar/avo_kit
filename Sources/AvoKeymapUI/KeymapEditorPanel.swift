@@ -1136,16 +1136,28 @@ private struct ActionsSection: View {
 }
 
 /// Whether a click on the game presses the selected control as its key
-/// would (its click zone), and the zone's shape, sized on the game.
+/// would (its click zone), and the zone's shape, sized on the game. A
+/// control that works only while the mouse is locked gets none: clicks
+/// press controls only while the mouse is free.
 private struct ClickZoneSection: View {
     @ObservedObject var model: KeymapEditorModel
     let control: Control
 
     var body: some View {
+        let locked = control.layer == .locked
         VStack(alignment: .leading, spacing: 7) {
             QuickToggle(label: L("Clicking the game presses it"),
                         caption: L("A click with the mouse free inside its area presses this control, as its key would: the game’s button is touched once, and its actions run once. Drag the area or its edges on the game."),
                         isOn: control.clickZone != nil) { on in model.setClickZone(on) }
+                // One it has already can still be turned off.
+                .disabled(locked && control.clickZone == nil)
+                .opacity(locked && control.clickZone == nil ? 0.45 : 1)
+            if locked {
+                Text(verbatim: L("This control works only while the mouse is locked, and clicks on the game press controls only while it is free."))
+                    .font(QuickHaze.mona(11.5))
+                    .foregroundStyle(control.clickZone == nil ? QuickHaze.textTertiary : Color(nsColor: .systemYellow))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let zone = control.clickZone {
                 InspectorRow(label: L("Area shape")) {
                     QuickSegmented(label: L("Area shape"),

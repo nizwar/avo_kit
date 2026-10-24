@@ -3795,6 +3795,16 @@
         }
       }
     },
+    "This control works only while the mouse is locked, and clicks on the game press controls only while it is free." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kontrol ini hanya bekerja saat mouse terkunci, sedangkan klik di game hanya menekan kontrol saat mouse bebas."
+          }
+        }
+      }
+    },
     "This controller cannot vibrate" : {
       "localizations" : {
         "id" : {
@@ -4485,6 +4495,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“%@” merespons %@."
+          }
+        }
+      }
+    },
+    "“%@” works only while the mouse is locked, and clicks on the game press controls only while it is free." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” hanya bekerja saat mouse terkunci, sedangkan klik di game hanya menekan kontrol saat mouse bebas."
           }
         }
       }

@@ -1723,6 +1723,10 @@ final class KeymapEditorView: NSView {
         if !on {
             profile.controls[i].clickZone = nil
             setStatus(String(localized: "Clicks on the game no longer press “\(name(of: profile.controls[i]))”.", bundle: .avoSharedKit))
+        } else if profile.controls[i].layer == .locked {
+            // Clicks press controls only while the mouse is free.
+            setStatus(String(localized: "“\(name(of: profile.controls[i]))” works only while the mouse is locked, and clicks on the game press controls only while it is free.",
+                             bundle: .avoSharedKit), problem: true)
         } else if profile.controls[i].clickZone == nil {
             let rect = displayRect()
             let aspect = rect.height > 0 && rect.width > 0 ? rect.width / rect.height : 16.0 / 9.0
