@@ -941,7 +941,7 @@
         }
       }
     },
-    "Choose the mouse button for this button of the game, or press a key." : {
+    "Choose the mouse button for this button in the game, or press a key." : {
       "localizations" : {
         "id" : {
           "stringUnit" : {
@@ -1273,16 +1273,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bawaan"
-          }
-        }
-      }
-    },
-    "Default Swipe Area (Right Side)" : {
-      "localizations" : {
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Area Geser Bawaan (Sisi Kanan)"
           }
         }
       }
@@ -1657,16 +1647,6 @@
         }
       }
     },
-    "For pressing the stick down (%@):" : {
-      "localizations" : {
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Untuk menekan stik ke bawah (%@):"
-          }
-        }
-      }
-    },
     "Free" : {
       "localizations" : {
         "id" : {
@@ -1707,22 +1687,22 @@
         }
       }
     },
+    "Full Height" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Setinggi Layar"
+          }
+        }
+      }
+    },
     "Full height" : {
       "localizations" : {
         "id" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Setinggi layar"
-          }
-        }
-      }
-    },
-    "Full-Height Swipe Area" : {
-      "localizations" : {
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Area Geser Setinggi Layar"
           }
         }
       }
@@ -1943,6 +1923,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Impor…"
+          }
+        }
+      }
+    },
+    "In a Circle" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dalam Lingkaran"
           }
         }
       }
@@ -2213,16 +2203,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Lepas untuk menaruhnya di sini"
-          }
-        }
-      }
-    },
-    "Let the Finger Use the Whole Screen" : {
-      "localizations" : {
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Jari Boleh ke Seluruh Layar"
           }
         }
       }
@@ -2687,12 +2667,12 @@
         }
       }
     },
-    "Place for %@:" : {
+    "Place for %@" : {
       "localizations" : {
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Taruh untuk %@:"
+            "value" : "Taruh untuk %@"
           }
         }
       }
@@ -2893,6 +2873,16 @@
         }
       }
     },
+    "Pressing it down (%@)" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menekannya ke bawah (%@)"
+          }
+        }
+      }
+    },
     "Put the area over the game’s button and size it by its edges, then add what a click does in the panel." : {
       "localizations" : {
         "id" : {
@@ -2929,16 +2919,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Balapan"
-          }
-        }
-      }
-    },
-    "Reach a Circle Around It" : {
-      "localizations" : {
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Jangkau Lingkaran di Sekitarnya"
           }
         }
       }
@@ -3155,6 +3135,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Klik Kanan"
+          }
+        }
+      }
+    },
+    "Right Side" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sisi Kanan"
           }
         }
       }
@@ -3815,6 +3805,16 @@
         }
       }
     },
+    "The wheel cannot push a joystick: press a key." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Roda mouse tidak bisa mendorong joystick: tekan tombol keyboard."
+          }
+        }
+      }
+    },
     "The wheel drags the scroll bar: press a key to reset it." : {
       "localizations" : {
         "id" : {
@@ -4025,12 +4025,12 @@
         }
       }
     },
-    "Use a mouse button or the wheel instead of a key" : {
+    "Use a mouse button, the wheel, Esc or Delete as its key" : {
       "localizations" : {
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pakai tombol mouse atau roda, bukan tombol keyboard"
+            "value" : "Pakai tombol mouse, roda, Esc, atau Delete sebagai tombolnya"
           }
         }
       }
@@ -4171,6 +4171,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ke arah mana putaran roda ke atas menggeser jempol; ke bawah menggesernya kembali."
+          }
+        }
+      }
+    },
+    "Whole Screen" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seluruh Layar"
           }
         }
       }

@@ -171,23 +171,31 @@ public final class HazeMenuPresenter {
 
     /// Shows `menu` in the haze with its top-left corner at `location` in
     /// `view` (NSMenu's popUp(positioning:at:in:)).
-    public func popUp(_ menu: NSMenu, at location: NSPoint, in view: NSView) {
-        guard let window = view.window else { return }
+    public func popUp(_ menu: NSMenu, at location: NSPoint, in view: NSView, onClose: (@MainActor () -> Void)? = nil) {
+        guard let window = view.window else {
+            onClose?()
+            return
+        }
         let entries = HazeMenuEntry.entries(from: menu)
         menu.delegate?.menuWillOpen?(menu)
         show(entries, at: window.convertPoint(toScreen: view.convert(location, to: nil))) {
             menu.delegate?.menuDidClose?(menu)
+            onClose?()
         }
     }
 
     /// Shows `menu` in the haze at the pointer, as a context menu (NSMenu's
     /// popUpContextMenu(_:with:for:)).
-    public func popUpContextMenu(_ menu: NSMenu, with event: NSEvent, for view: NSView) {
-        guard let window = event.window ?? view.window else { return }
+    public func popUpContextMenu(_ menu: NSMenu, with event: NSEvent, for view: NSView, onClose: (@MainActor () -> Void)? = nil) {
+        guard let window = event.window ?? view.window else {
+            onClose?()
+            return
+        }
         let entries = HazeMenuEntry.entries(from: menu)
         menu.delegate?.menuWillOpen?(menu)
         show(entries, at: window.convertPoint(toScreen: event.locationInWindow), for: event) {
             menu.delegate?.menuDidClose?(menu)
+            onClose?()
         }
     }
 

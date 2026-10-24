@@ -811,7 +811,7 @@ private struct InspectorCard: View {
                     BarLabel(title: nil, symbol: "computermouse")
                 }
                 .buttonStyle(.plain)
-                .help(L("Use a mouse button or the wheel instead of a key"))
+                .help(L("Use a mouse button, the wheel, Esc or Delete as its key"))
                 .accessibilityLabel(Text(verbatim: L("Mouse button")))
             }
         }

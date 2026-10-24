@@ -934,6 +934,10 @@ final class KeymapEditorView: NSView {
                                  bundle: .avoSharedKit))
             }
         case let .dpad(center, radius, up, down, left, right, stick):
+            guard !trigger.isMomentary else {
+                setStatus(String(localized: "The wheel cannot push a joystick: press a key.", bundle: .avoSharedKit), problem: true)
+                return
+            }
             var keys = [up, left, down, right]
             if let other = keys.firstIndex(of: trigger), other != dpadSlot {
                 keys[other] = keys[dpadSlot] // swap rather than bind one key twice
@@ -1230,45 +1234,88 @@ final class KeymapEditorView: NSView {
         }
     }
 
-    /// Right-click: mouse buttons and the wheel as triggers, and removal; on
-    /// the game, a tap there for a mouse button.
+    /// Right-click: what the control takes as its key (mouse buttons, the
+    /// wheel, Esc, Delete), its area's choices, its modes, its actions and
+    /// removal; on the game, a tap there for a mouse button.
     override func rightMouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
+        guard let window else { return }
+        let at = window.convertPoint(toScreen: event.locationInWindow)
         guard let id = hit(at: p)?.controlID else {
-            guard displayRect().contains(p), let window else { return }
+            guard displayRect().contains(p) else { return }
             selected = nil
             pendingTap = normalized(p)
-            setStatus(String(localized: "Choose the mouse button for this button of the game, or press a key.", bundle: .avoSharedKit))
-            HazeMenuPresenter.shared.show(mouseEntries(), at: window.convertPoint(toScreen: event.locationInWindow), for: event)
+            setStatus(String(localized: "Choose the mouse button for this button in the game, or press a key.", bundle: .avoSharedKit))
+            HazeMenuPresenter.shared.show(mouseEntries(), at: at, for: event)
             return
         }
         select(id)
         needsDisplay = true
-        let menu = NSMenu()
-        for (title, trigger, symbol) in Self.mouseChoices {
-            let item = NSMenuItem(title: title, action: #selector(assignFromMenu(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = trigger.description
-            item.symbol(symbol)
-            menu.addItem(item)
+        HazeMenuPresenter.shared.show(contextEntries(for: id), at: at, for: event)
+    }
+
+    /// The right-click menu of the control `id`.
+    func contextEntries(for id: String) -> [HazeMenuEntry] {
+        guard let control = profile.controls.first(where: { $0.id == id }) else { return [] }
+        var entries: [HazeMenuEntry] = []
+        let keys = keyEntries(for: control)
+        if !keys.isEmpty {
+            entries.append(.section(isEye(control) ? String(localized: "Mouse lock key", bundle: .avoSharedKit) : String(localized: "Key", bundle: .avoSharedKit)))
+            entries += keys
         }
-        if let control = profile.controls.first(where: { $0.id == id }) {
-            let items = areaChoices(for: control)
-            if !items.isEmpty { menu.addItem(.separator()) }
-            for (title, action, symbol) in items {
-                let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-                item.target = self
-                item.symbol(symbol)
-                menu.addItem(item)
-            }
-            for item in modeItems(for: control) { menu.addItem(item) }
+        let area = areaEntries(for: control)
+        if !area.isEmpty {
+            if !entries.isEmpty { entries.append(.separator()) }
+            entries += area
         }
-        menu.addItem(.separator())
-        let remove = NSMenuItem(title: String(localized: "Remove", bundle: .avoSharedKit), action: #selector(removeSelected), keyEquivalent: "")
-        remove.target = self
-        remove.symbol("trash")
-        menu.addItem(remove)
-        HazeMenuPresenter.shared.popUpContextMenu(menu, with: event, for: self)
+        var more: [HazeMenuEntry] = []
+        if !profile.modes.isEmpty {
+            more.append(.item(HazeMenuItem(title: String(localized: "Works In", bundle: .avoSharedKit), symbol: "square.stack.3d.up",
+                                           submenu: { [weak self] in self?.modeEntries(for: id) ?? [] })))
+        }
+        if control.canCarryActions {
+            more.append(.item(HazeMenuItem(title: String(localized: "Add Action", bundle: .avoSharedKit), symbol: "plus",
+                                           submenu: { [weak self] in self?.addActionEntries() ?? [] })))
+        }
+        if !more.isEmpty {
+            if !entries.isEmpty { entries.append(.separator()) }
+            entries += more
+        }
+        if !entries.isEmpty { entries.append(.separator()) }
+        entries.append(.item(HazeMenuItem(title: String(localized: "Remove", bundle: .avoSharedKit), symbol: "trash", role: .destructive) {
+            [weak self] in
+            self?.remove(id)
+            self?.refocus()
+        }))
+        return entries
+    }
+
+    /// The mouse buttons, the wheel and the editor's own keys `control`
+    /// takes as its key (nil: the tap waiting for its key). A joystick's four
+    /// keys and a scroll bar's reset key are set in the panel, a click area
+    /// takes none; the wheel works with a tap, a swipe, a macro and a hotkey
+    /// only, and a left click is the game's own (never the mouse lock's).
+    private func keyChoices(for control: Control?) -> [(title: String, trigger: Trigger, symbol: String)] {
+        guard let control else { return Self.mouseChoices }
+        switch control.kind {
+        case .clickArea, .scrollBar, .dpad: return []
+        case .tap, .swipe, .macro, .hotkey: return Self.mouseChoices
+        case .aim: return Self.mouseChoices.filter { !$0.trigger.isMomentary && $0.trigger != .mouse(.left) }
+        default: return Self.mouseChoices.filter { !$0.trigger.isMomentary }
+        }
+    }
+
+    /// The key choices as menu items, the control's own ticked.
+    private func keyEntries(for control: Control?) -> [HazeMenuEntry] {
+        keyChoices(for: control).map { title, trigger, symbol in
+            let on = control.map { control in
+                isEye(control) ? profile.fps?.cursorToggle == trigger : control.triggers.contains(trigger)
+            } ?? false
+            return .item(HazeMenuItem(title: title, symbol: symbol, state: on ? .on : .off) { [weak self] in
+                self?.assign(trigger)
+                self?.refocus()
+            })
+        }
     }
 
     /// A mouse button or the wheel for a control, as the menus list them,
@@ -1287,46 +1334,24 @@ final class KeymapEditorView: NSView {
         ]
     }
 
-    /// A control's menu items for modes: the modes it acts in.
-    private func modeItems(for control: Control) -> [NSMenuItem] {
-        var items: [NSMenuItem] = []
-        func submenu(_ title: String, _ entries: [(title: String, value: String, on: Bool)], _ action: Selector) -> NSMenuItem {
-            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-            let menu = NSMenu()
-            menu.autoenablesItems = false
-            for entry in entries {
-                if entry.value.isEmpty {
-                    menu.addItem(.separator())
-                    continue
-                }
-                let choice = NSMenuItem(title: entry.title, action: action, keyEquivalent: "")
-                choice.target = self
-                choice.representedObject = entry.value
-                choice.state = entry.on ? .on : .off
-                menu.addItem(choice)
-            }
-            item.submenu = menu
-            return item
+    /// The modes a control works in, to tick: every mode, or some.
+    private func modeEntries(for id: String) -> [HazeMenuEntry] {
+        guard let control = profile.controls.first(where: { $0.id == id }) else { return [] }
+        let every = HazeMenuItem(title: String(localized: "Every Mode", bundle: .avoSharedKit), state: control.modes == nil ? .on : .off) {
+            [weak self] in
+            self?.setActsIn(nil)
+            self?.refocus()
         }
-        if !profile.modes.isEmpty {
-            let modes = [(String(localized: "Every Mode", bundle: .avoSharedKit), "*", control.modes == nil), ("", "", false)]
-                + profile.modes.map { ($0.name, $0.id, control.modes?.contains($0.id) == true) }
-            items.append(submenu(String(localized: "Works In", bundle: .avoSharedKit), modes, #selector(setControlModes(_:))).symbol("square.stack.3d.up"))
-        }
-        return items.isEmpty ? [] : [.separator()] + items
-    }
-
-    @objc private func setControlModes(_ item: NSMenuItem) {
-        guard let id = selected, let control = profile.controls.first(where: { $0.id == id }),
-              let value = item.representedObject as? String else { return }
-        if value == "*" {
-            setActsIn(nil)
-        } else {
-            var modes = control.modes ?? []
-            if let at = modes.firstIndex(of: value) { modes.remove(at: at) } else { modes.append(value) }
-            // In the layout's order; none left is every mode.
-            modes = profile.modes.map(\.id).filter(modes.contains)
-            setActsIn(modes.isEmpty ? nil : modes)
+        return [.item(every), .separator()] + profile.modes.map { mode in
+            .item(HazeMenuItem(title: mode.name, state: control.modes?.contains(mode.id) == true ? .on : .off) { [weak self] in
+                guard let self, let control = profile.controls.first(where: { $0.id == id }) else { return }
+                var modes = control.modes ?? []
+                if let at = modes.firstIndex(of: mode.id) { modes.remove(at: at) } else { modes.append(mode.id) }
+                // In the layout's order; none left is every mode.
+                modes = profile.modes.map(\.id).filter(modes.contains)
+                setActsIn(modes.isEmpty ? nil : modes)
+                refocus()
+            })
         }
     }
 
@@ -1562,31 +1587,33 @@ final class KeymapEditorView: NSView {
         }
     }
 
-    @objc private func assignFromMenu(_ item: NSMenuItem) {
-        guard let text = item.representedObject as? String, let trigger = Trigger(string: text) else { return }
-        assign(trigger)
-    }
-
     @objc private func removeSelected() {
         if let selected { remove(selected) }
     }
 
-    /// One-click areas: an eye's at full height or the default one (the
-    /// right side), its point back at the centre, an anchor tap's whole screen.
-    private func areaChoices(for control: Control) -> [(String, Selector, String)] {
+    /// An eye's swipe area (at full height, the right side, its point back
+    /// in the middle) and an anchor tap's reach, as the panel names them.
+    private func areaEntries(for control: Control) -> [HazeMenuEntry] {
+        func item(_ title: String, _ symbol: String, on: Bool = false, _ action: @escaping @MainActor (KeymapEditorView) -> Void) -> HazeMenuEntry {
+            .item(HazeMenuItem(title: title, symbol: symbol, state: on ? .on : .off) { [weak self] in
+                guard let self else { return }
+                action(self)
+                refocus()
+            })
+        }
         switch control.kind {
         case let .aim(_, _, _, _, _, _, _, origin):
-            var choices = [(String(localized: "Full-Height Swipe Area", bundle: .avoSharedKit), #selector(useFullHeightArea), "arrow.up.and.down"),
-                           (String(localized: "Default Swipe Area (Right Side)", bundle: .avoSharedKit), #selector(useDefaultArea),
-                            "rectangle.righthalf.inset.filled")]
+            var entries = [.section(String(localized: "Swipe area", bundle: .avoSharedKit)),
+                           item(String(localized: "Full Height", bundle: .avoSharedKit), "arrow.up.and.down") { $0.useFullHeightArea() },
+                           item(String(localized: "Right Side", bundle: .avoSharedKit), "rectangle.righthalf.inset.filled") { $0.useDefaultArea() }]
             if origin != nil {
-                choices.append((String(localized: "Touch in the Middle", bundle: .avoSharedKit), #selector(touchDownAtCentre), "scope"))
+                entries.append(item(String(localized: "Touch in the Middle", bundle: .avoSharedKit), "scope") { $0.touchDownAtCentre() })
             }
-            return choices
-        case .anchor(_, nil):
-            return [(String(localized: "Reach a Circle Around It", bundle: .avoSharedKit), #selector(useCircleReach), "circle.dashed")]
-        case .anchor:
-            return [(String(localized: "Let the Finger Use the Whole Screen", bundle: .avoSharedKit), #selector(useWholeScreen), "rectangle.dashed")]
+            return entries
+        case .anchor(_, let radius):
+            return [.section(String(localized: "Finger reach", bundle: .avoSharedKit)),
+                    item(String(localized: "In a Circle", bundle: .avoSharedKit), "circle.dashed", on: radius != nil) { $0.useCircleReach() },
+                    item(String(localized: "Whole Screen", bundle: .avoSharedKit), "rectangle.dashed", on: radius == nil) { $0.useWholeScreen() }]
         default:
             return []
         }
@@ -1599,7 +1626,7 @@ final class KeymapEditorView: NSView {
         needsDisplay = true
     }
 
-    @objc private func useFullHeightArea() {
+    private func useFullHeightArea() {
         changeSelectedArea { control in
             guard let area = control.fingerArea else { return }
             let full = Control.defaultEyeArea
@@ -1607,22 +1634,22 @@ final class KeymapEditorView: NSView {
         }
     }
 
-    @objc private func useDefaultArea() {
+    private func useDefaultArea() {
         changeSelectedArea { $0.setFingerArea(Control.defaultEyeArea) }
     }
 
-    @objc private func touchDownAtCentre() {
+    private func touchDownAtCentre() {
         changeSelectedArea { $0.setTouchPoint(nil) }
     }
 
-    @objc private func useWholeScreen() {
+    private func useWholeScreen() {
         changeSelectedArea { control in
             if case .anchor(let point, _) = control.kind { control.kind = .anchor(point) }
         }
         setStatus(String(localized: "The finger may now go anywhere on the screen.", bundle: .avoSharedKit))
     }
 
-    @objc private func useCircleReach() {
+    private func useCircleReach() {
         changeSelectedArea { control in
             if case .anchor(let point, _) = control.kind { control.kind = .anchor(point, radius: Control.defaultAnchorRadius) }
         }
@@ -2044,12 +2071,7 @@ final class KeymapEditorView: NSView {
     /// Mouse buttons and the wheel, as the trigger of the selected control
     /// or of the waiting tap.
     private func mouseEntries() -> [HazeMenuEntry] {
-        Self.mouseChoices.map { title, trigger, symbol in
-            .item(HazeMenuItem(title: title, symbol: symbol) { [weak self] in
-                self?.assign(trigger)
-                self?.refocus()
-            })
-        }
+        keyEntries(for: pendingTap == nil ? selected.flatMap { id in profile.controls.first { $0.id == id } } : nil)
     }
 
     @objc private func removeAll() {
@@ -2338,59 +2360,52 @@ final class KeymapEditorView: NSView {
 
     /// The menu of controls that `element` can place at `p`; a stick's also has its press's.
     private func showPlacements(for element: GamepadElement, at p: CGPoint) {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        let point = normalized(p)
-        func header(_ title: String) {
-            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            menu.addItem(item)
-        }
-        func add(_ placement: GamepadPlacement, for element: GamepadElement) {
-            let item = NSMenuItem(title: Self.title(of: placement), action: #selector(placeFromMenu(_:)), keyEquivalent: "")
-            item.target = self
-            item.image = NSImage(systemSymbolName: Self.symbol(of: placement), accessibilityDescription: nil)
-            item.representedObject = PendingPlacement(element: element, placement: placement, point: point)
-            item.indentationLevel = 1
-            menu.addItem(item)
-        }
-        /// The placements by kind of game, under General and FPS when both have some.
-        func addGrouped(_ placements: [GamepadPlacement], for element: GamepadElement) {
-            let groups = KeymapCategory.allCases.map { category in (category, placements.filter { Self.category(of: $0) == category }) }
-                .filter { !$0.1.isEmpty }
-            for (category, members) in groups {
-                if groups.count > 1 {
-                    let item = NSMenuItem(title: category.title, action: nil, keyEquivalent: "")
-                    item.isEnabled = false
-                    item.indentationLevel = 1
-                    menu.addItem(item)
-                }
-                for placement in members { add(placement, for: element) }
-            }
-        }
-        header(String(localized: "Place for \(padLabel(element)):", bundle: .avoSharedKit))
-        addGrouped(GamepadPlacement.choices(for: element), for: element)
-        if case .stick(let stick) = element {
-            let press = GamepadElement.button(GamepadElement.pressButton(of: stick))
-            menu.addItem(.separator())
-            header(String(localized: "For pressing the stick down (\(padLabel(press))):", bundle: .avoSharedKit))
-            addGrouped(GamepadPlacement.choices(for: press), for: press)
-        }
-        HazeMenuPresenter.shared.popUp(menu, at: p, in: self)
+        guard let window else { return }
+        let header = HazeMenuHeader(title: String(localized: "Place for \(padLabel(element))", bundle: .avoSharedKit))
+        HazeMenuPresenter.shared.show(placementEntries(for: element, at: normalized(p)), header: header,
+                                      at: window.convertPoint(toScreen: convert(p, to: nil)))
     }
 
-    @objc private func placeFromMenu(_ item: NSMenuItem) {
-        guard let pending = item.representedObject as? PendingPlacement else { return }
-        let element = pending.element
+    /// The controls `element` can place at `point`, by the kind of game
+    /// (General, FPS) when both have some; a stick's press under its own title.
+    func placementEntries(for element: GamepadElement, at point: NormalizedPoint) -> [HazeMenuEntry] {
+        var entries: [HazeMenuEntry] = []
+        func add(_ placements: [GamepadPlacement], for element: GamepadElement, titled title: String?) {
+            let groups = KeymapCategory.allCases.map { category in (category, placements.filter { Self.category(of: $0) == category }) }
+                .filter { !$0.1.isEmpty }
+            for (index, (category, members)) in groups.enumerated() {
+                if let title, index == 0 {
+                    entries.append(.section(groups.count > 1 ? "\(title) · \(category.title)" : title))
+                } else if groups.count > 1 {
+                    entries.append(.section(title.map { "\($0) · \(category.title)" } ?? category.title))
+                }
+                for placement in members {
+                    entries.append(.item(HazeMenuItem(title: Self.title(of: placement), symbol: Self.symbol(of: placement)) { [weak self] in
+                        self?.place(element, as: placement, at: point)
+                    }))
+                }
+            }
+        }
+        add(GamepadPlacement.choices(for: element), for: element, titled: nil)
+        if case .stick(let stick) = element {
+            let press = GamepadElement.button(GamepadElement.pressButton(of: stick))
+            entries.append(.separator())
+            add(GamepadPlacement.choices(for: press), for: press,
+                titled: String(localized: "Pressing it down (\(padLabel(press)))", bundle: .avoSharedKit))
+        }
+        return entries
+    }
+
+    private func place(_ element: GamepadElement, as placement: GamepadPlacement, at point: NormalizedPoint) {
         let hadEye = profile.controls.contains(where: isEye)
-        guard let id = profile.place(element, as: pending.placement, at: pending.point, modes: editingMode.map { [$0] }),
+        guard let id = profile.place(element, as: placement, at: point, modes: editingMode.map { [$0] }),
               let control = profile.controls.first(where: { $0.id == id }) else {
             setStatus(whyNot(element), problem: true)
             return
         }
         selected = nil
         select(id)
-        if pending.placement == .camera, hadEye {
+        if placement == .camera, hadEye {
             setStatus(String(localized: "\(padLabel(element)) turns the eye now. Drag its area over the part of the game that turns the camera.",
                              bundle: .avoSharedKit))
         } else {
@@ -2398,6 +2413,7 @@ final class KeymapEditorView: NSView {
                              bundle: .avoSharedKit))
         }
         needsDisplay = true
+        refocus()
     }
 
     /// Why `element` could not be placed or bound: what holds it.
@@ -2710,24 +2726,6 @@ final class KeymapEditorView: NSView {
             }
     }
 
-    /// The bar's ⋯ menu.
-    private func moreEntries() -> [HazeMenuEntry] {
-        [
-            .item(HazeMenuItem(title: String(localized: "Import…", bundle: .avoSharedKit), symbol: "square.and.arrow.down") { [weak self] in
-                self?.importProfile()
-            }),
-            .item(HazeMenuItem(title: String(localized: "Export…", bundle: .avoSharedKit), symbol: "square.and.arrow.up") { [weak self] in
-                self?.exportProfile()
-            }),
-            .separator(),
-            .item(HazeMenuItem(title: String(localized: "Remove All Controls", bundle: .avoSharedKit), symbol: "trash", role: .destructive) {
-                [weak self] in
-                self?.removeAll()
-                self?.refocus()
-            }),
-        ]
-    }
-
     private func chooseTemplate(_ template: KeymapTemplate) {
         guard !profile.controls.isEmpty, let window else {
             insert(template, replacing: true)
@@ -2887,20 +2885,6 @@ final class KeymapEditorView: NSView {
         alert.beginSheetModal(for: window) { [weak self] response in
             if response == .alertSecondButtonReturn { self?.close() } else { self?.refocus() }
         }
-    }
-}
-
-/// A control the placement menu would place: for which part of the
-/// controller, of which kind, where on the game.
-private final class PendingPlacement: NSObject {
-    let element: GamepadElement
-    let placement: GamepadPlacement
-    let point: NormalizedPoint
-
-    init(element: GamepadElement, placement: GamepadPlacement, point: NormalizedPoint) {
-        self.element = element
-        self.placement = placement
-        self.point = point
     }
 }
 
