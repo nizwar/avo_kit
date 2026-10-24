@@ -262,8 +262,8 @@ public final class KeymapController {
             default: break
             }
         }
-        // A click's finger, its button up without a mouseUp.
-        if clickSeenDown, engine?.isClickFingerDown == true, buttons & 1 == 0 {
+        // A click (its finger, or what its click zone pressed), its button up without a mouseUp.
+        if clickSeenDown, engine?.isClickDown == true, buttons & 1 == 0 {
             clickSeenDown = false
             letGoUnseen.insert(.mouse(.left))
             let at = cursorInDisplay() ?? (0, 0)

@@ -84,7 +84,7 @@ public struct KeymapEngine: Sendable {
     private enum Action: Sendable {
         case lift(touch: Int)
         case move(touch: Int, x: Double, y: Double)
-        case repeatTap(control: String, trigger: Trigger)
+        case repeatTap(control: String)
         case macroStep(control: String, index: Int)
         /// A scroll bar's finger lets go, unless the wheel turned again since (`generation`).
         case barRelease(control: String, generation: Int)
@@ -122,12 +122,19 @@ public struct KeymapEngine: Sendable {
     private var glides: [String: GlideTouch] = [:]
     /// The free cursor, in pixels, as the host last reported it.
     private var cursor: (x: Double, y: Double)?
+    /// The cursor where held anchor taps last followed it while a mouse
+    /// button is down (macOS sends drags then, not moves, so the host's
+    /// reports are all the engine hears of the mouse).
+    private var dragCursor: (x: Double, y: Double)?
     /// The touch of a click that no control took (`fingerDown`).
     private var clickFinger: Int?
-    /// A click that a click area kept from the game: its release is taken too.
+    /// A click that a click zone or a click area kept from the game: its release is taken too.
     private var clickSwallowed = false
     /// The controls a click on their click zone holds down, until it lets go.
     private var zonePressed: [String] = []
+    /// The repeat taps tapping now: one chain each, whether its key, another
+    /// of its keys or its click zone holds it.
+    private var repeating: Set<String> = []
     /// Where each scroll bar's thumb is, as a fraction of its track (its
     /// rest point until the wheel moves it), and how often the wheel has
     /// turned it, so only the last notch's release lets go.
@@ -193,6 +200,14 @@ public struct KeymapEngine: Sendable {
             output.consumed = isFollowingCursor
             for control in controls where control.followsCursor && held[control.id] != nil { aimAtCursor(control, now: false) }
             if let clickFinger { move(clickFinger, x: clampX(x), y: clampY(y)) }
+            // With a mouse button down, a held anchor tap follows the reports
+            // (with none down it follows `pointerMoved`).
+            if !anchors.isEmpty, isMouseButtonDown {
+                if let last = dragCursor { moveAnchors(dx: x - last.x, dy: y - last.y) }
+                dragCursor = (x, y)
+            } else {
+                dragCursor = nil
+            }
             // Where the fingers go, nothing sent yet: the host reports the
             // cursor on every frame, and `tick` sends one move per frame and
             // glides at one pace whatever the frame rate.
@@ -200,6 +215,13 @@ public struct KeymapEngine: Sendable {
             return output
         case let .fingerDown(x, y):
             output.consumed = true
+            // A click whose release never came ends first: what it pressed
+            // lets go, its finger lifts.
+            endClick(at: now)
+            // The cursor is where the click is: an anchor it presses follows
+            // the cursor from here.
+            cursor = (x, y)
+            dragCursor = (x, y)
             // A control's click zone under it presses the control as its key
             // would, and the click is not the game's: its button is touched once.
             if pressZones(at: x, y, now: now, output: &output) {
@@ -212,11 +234,7 @@ public struct KeymapEngine: Sendable {
                 clickSwallowed = true
                 break
             }
-            if let clickFinger {
-                move(clickFinger, x: clampX(x), y: clampY(y))
-            } else {
-                clickFinger = down(x: clampX(x), y: clampY(y))
-            }
+            clickFinger = down(x: clampX(x), y: clampY(y))
         case let .fingerUp(x, y):
             if clickSwallowed {
                 clickSwallowed = false
@@ -227,7 +245,10 @@ public struct KeymapEngine: Sendable {
             guard let touch = clickFinger else { break }
             output.consumed = true
             clickFinger = nil
-            move(touch, x: clampX(x), y: clampY(y))
+            // With the mouse locked since the click went down (a click
+            // area's action), the cursor is parked out of sight: the finger
+            // lifts where it touched, a tap on the game's button and no drag.
+            if !pointerLocked { move(touch, x: clampX(x), y: clampY(y)) }
             lift(touch)
         case let .gamepadStick(stick, x, y):
             sticks[stick] = (x, y)
@@ -273,9 +294,11 @@ public struct KeymapEngine: Sendable {
         glides.removeAll()
         stickRestingSince.removeAll()
         cursor = nil
+        dragCursor = nil
         clickFinger = nil
         clickSwallowed = false
         zonePressed.removeAll()
+        repeating.removeAll()
         adsActive = false
         pointerLocked = false
         flushMoves()
@@ -328,12 +351,12 @@ public struct KeymapEngine: Sendable {
 
     public var activeTouchCount: Int { touches.count }
 
-    /// A MOBA move or smart cast is held, or a click's finger is down: they
-    /// follow the cursor, so the host reports it on every frame (while a
-    /// mouse button is down macOS sends drags, which do not reach the keymap
-    /// as moves).
+    /// A MOBA move or smart cast is held, a click's finger is down, or an
+    /// anchor tap is held while a mouse button is: they follow the cursor,
+    /// so the host reports it on every frame (while a mouse button is down
+    /// macOS sends drags, which do not reach the keymap as moves).
     public var isFollowingCursor: Bool {
-        clickFinger != nil || controls.contains { $0.followsCursor && held[$0.id] != nil }
+        clickFinger != nil || controls.contains { $0.followsCursor && held[$0.id] != nil } || (!anchors.isEmpty && isMouseButtonDown)
     }
 
     /// The keys and buttons the engine holds down now. The host checks them
@@ -341,8 +364,22 @@ public struct KeymapEngine: Sendable {
     /// all the same (KeymapController's `releaseUnseen`).
     public var heldTriggers: Set<Trigger> { pressed }
 
-    /// A click's finger is on the screen: `fingerDown` without its `fingerUp` yet.
-    public var isClickFingerDown: Bool { clickFinger != nil }
+    /// A click is held: `fingerDown` without its `fingerUp` yet, whether its
+    /// finger is on the game or a click zone or click area took it.
+    public var isClickDown: Bool { clickFinger != nil || clickSwallowed }
+
+    /// Whether a press of `trigger` would reach a control now (in this mode,
+    /// with the mouse as it is), or is the mouse lock's key: the host keeps
+    /// such input from the game (a trackpad's scrolling between two notches).
+    public func takes(_ trigger: Trigger) -> Bool {
+        if let fps = profile.fps, trigger == fps.cursorToggle { return true }
+        return !matches(trigger).isEmpty
+    }
+
+    /// A mouse button is down for the mapping: a click, or a button a control took.
+    private var isMouseButtonDown: Bool {
+        isClickDown || pressed.contains { if case .mouse = $0 { true } else { false } }
+    }
 
     // MARK: Triggers
 
@@ -391,14 +428,7 @@ public struct KeymapEngine: Sendable {
             toggled = true
         }
         guard !pressed.contains(trigger) || trigger.isMomentary else { return true }
-        var matches = controls.filter { isActive($0) && $0.allTriggers.contains(trigger) }
-        // With the mouse free, a left click is the player's finger on the
-        // game: it fires a control only while the mouse is locked (or for a
-        // control made for the cursor, such as moving a MOBA hero by mouse),
-        // so the game's own buttons stay clickable.
-        if trigger == .mouse(.left), !pointerLocked {
-            matches = matches.filter { $0.layer == .cursor || $0.followsCursor }
-        }
+        let matches = matches(trigger)
         // In cursor mode an unbound left click is a normal touch at the cursor (handled by the host).
         guard !matches.isEmpty else { return toggled }
         pressed.insert(trigger)
@@ -407,6 +437,17 @@ public struct KeymapEngine: Sendable {
         for control in matches where control.touchesTheScreen { activate(control, trigger: trigger, at: now) }
         for control in matches { run(control.actions, output: &output) }
         return true
+    }
+
+    /// The controls a press of `trigger` reaches now.
+    private func matches(_ trigger: Trigger) -> [Control] {
+        let matches = controls.filter { isActive($0) && $0.allTriggers.contains(trigger) }
+        // With the mouse free, a left click is the player's finger on the
+        // game: it fires a control only while the mouse is locked (or for a
+        // control made for the cursor, such as moving a MOBA hero by mouse),
+        // so the game's own buttons stay clickable.
+        guard trigger == .mouse(.left), !pointerLocked else { return matches }
+        return matches.filter { $0.layer == .cursor || $0.followsCursor }
     }
 
     /// A control's actions, in its order.
@@ -485,27 +526,29 @@ public struct KeymapEngine: Sendable {
         return true
     }
 
-    /// Lets go of what `control` holds, unless another of its keys still holds it.
+    /// Lets go of what `control` holds, unless another of its keys still
+    /// holds it (its click zone's click is the callers' to check).
     private mutating func releaseControl(_ control: Control, at now: TimeInterval) {
+        // Still held through another of its triggers.
+        let stillHeld = control.triggers.contains(where: pressed.contains)
         switch control.kind {
         case .tap, .hold:
-            // Still held through another of its triggers.
-            guard !control.triggers.contains(where: pressed.contains),
-                  let touch = held.removeValue(forKey: control.id) else { return }
+            guard !stillHeld, let touch = held.removeValue(forKey: control.id) else { return }
             let earliest = (heldSince.removeValue(forKey: control.id) ?? now) + Double(Self.tapDurationMilliseconds) / 1000
             // A quick press still gives the app a whole tap.
             if now < earliest { enqueue(earliest, .lift(touch: touch)) } else { lift(touch) }
         case .ads(_, let toggle) where !toggle:
+            guard !stillHeld else { return }
             if let touch = held.removeValue(forKey: control.id) { lift(touch) }
             adsActive = false
         case .dpad:
             updateDPad(control)
         case .anchor:
+            guard !stillHeld else { return }
             anchors[control.id] = nil
             if let touch = held.removeValue(forKey: control.id) { lift(touch) }
         case .mobaMove, .smartCast:
-            guard !control.triggers.contains(where: pressed.contains),
-                  let touch = held.removeValue(forKey: control.id) else { return }
+            guard !stillHeld, let touch = held.removeValue(forKey: control.id) else { return }
             // Let go where it is aimed now, not partway through the
             // glide: a skill casts where the finger leaves the screen.
             let aim = glides.removeValue(forKey: control.id)
@@ -558,8 +601,11 @@ public struct KeymapEngine: Sendable {
             }
             enqueue(now + Double(ms) / 1000, .lift(touch: touch))
         case let .repeatTap(point, interval):
+            // Pressed again (its other key, its click zone) while it taps:
+            // the one chain goes on at its own pace.
+            guard repeating.insert(control.id).inserted else { return }
             tap(point, at: now)
-            enqueue(now + Double(interval) / 1000, .repeatTap(control: control.id, trigger: trigger))
+            enqueue(now + Double(interval) / 1000, .repeatTap(control: control.id))
         case .macro:
             runMacroStep(control, index: 0, at: now)
         case let .anchor(point, radius):
@@ -642,6 +688,19 @@ public struct KeymapEngine: Sendable {
         zonePressed.removeAll()
         for id in ids {
             if let control = controls.first(where: { $0.id == id }) { releaseControl(control, at: now) }
+        }
+    }
+
+    /// Ends the click being held, as its `fingerUp` would where it is: the
+    /// zones it pressed let go, its finger on the game lifts.
+    private mutating func endClick(at now: TimeInterval) {
+        if clickSwallowed {
+            clickSwallowed = false
+            releaseZones(at: now)
+        }
+        if let clickFinger {
+            lift(clickFinger)
+            self.clickFinger = nil
         }
     }
 
@@ -888,11 +947,14 @@ public struct KeymapEngine: Sendable {
                 lift(touch)
             case let .move(touch, x, y):
                 move(touch, x: x * width, y: y * height)
-            case let .repeatTap(controlID, trigger):
-                guard pressed.contains(trigger) || zonePressed.contains(controlID), let control = controls.first(where: { $0.id == controlID }),
-                      case let .repeatTap(point, interval) = control.kind, isActive(control) else { continue }
+            case .repeatTap(let controlID):
+                guard let control = controls.first(where: { $0.id == controlID }), case let .repeatTap(point, interval) = control.kind,
+                      control.triggers.contains(where: pressed.contains) || zonePressed.contains(controlID), isActive(control) else {
+                    repeating.remove(controlID)
+                    continue
+                }
                 tap(point, at: time)
-                enqueue(time + Double(interval) / 1000, .repeatTap(control: controlID, trigger: trigger))
+                enqueue(time + Double(interval) / 1000, .repeatTap(control: controlID))
             case let .barRelease(controlID, generation):
                 guard barTurns[controlID] == generation, let touch = held.removeValue(forKey: controlID) else { continue }
                 // Let go where the thumb was dragged to, not partway through the glide.
