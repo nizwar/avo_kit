@@ -195,7 +195,9 @@ final class KeymapEditorModel: ObservableObject {
     /// One of the editor's questions is up over the game: the panel waits for its answer.
     @Published var sheetUp = false
     @Published var hasEye = false
-    /// The scroll bars over the eye's area, which work only while the mouse is free.
+    /// The layout locks the mouse (the eye has its key): controls of a layer mean something.
+    @Published var hasMouseLock = false
+    /// The scroll bars over the eye's area in a mode it works in, which cannot be saved there.
     @Published var barsOverTheEye: Set<String> = []
     @Published var showOnGame = true
     @Published var hintOpacity = 0.75
@@ -951,9 +953,9 @@ private struct InspectorSettings: View {
         case let .scrollBar(_, _, rest, step):
             let vertical = control.isVerticalScrollBar
             if model.barsOverTheEye.contains(control.id) {
-                Text(verbatim: L("Over the eye’s area it works only while the mouse is free: while you aim, its drag there would turn the camera."))
+                Text(verbatim: L("Over the eye’s area it would turn the camera, so it can’t be saved there: move it, or give it a mode without the eye."))
                     .font(QuickHaze.mona(11.5))
-                    .foregroundStyle(QuickHaze.textSecondary)
+                    .foregroundStyle(Color(nsColor: .systemYellow))
                     .fixedSize(horizontal: false, vertical: true)
             }
             InspectorRow(label: L("Direction")) {
@@ -1153,7 +1155,8 @@ private struct ClickZoneSection: View {
     let control: Control
 
     var body: some View {
-        let locked = control.layer == .locked
+        // Only with the mouse lock does a layer mean anything.
+        let locked = model.hasMouseLock && control.layer == .locked
         VStack(alignment: .leading, spacing: 7) {
             QuickToggle(label: L("Clicking the game presses it"),
                         caption: L("A click with the mouse free inside its area presses this control, as its key would: the game’s button is touched once, and its actions run once. Drag the area or its edges on the game."),

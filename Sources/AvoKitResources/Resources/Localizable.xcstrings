@@ -2657,12 +2657,12 @@
         }
       }
     },
-    "Over the eye’s area it works only while the mouse is free: while you aim, its drag there would turn the camera." : {
+    "Over the eye’s area it would turn the camera, so it can’t be saved there: move it, or give it a mode without the eye." : {
       "localizations" : {
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Di area mata, ini hanya bekerja saat mouse bebas: saat Anda membidik, tarikannya di sana akan memutar kamera."
+            "value" : "Di area mata, ini akan memutar kamera, jadi tidak bisa disimpan di sana: pindahkan, atau beri mode tanpa mata."
           }
         }
       }

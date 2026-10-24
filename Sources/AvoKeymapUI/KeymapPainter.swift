@@ -423,9 +423,23 @@ struct KeymapPainter {
         if !control.isOnGame {
             let c = CGPoint(x: r.midX, y: r.midY), text = triggerText(control)
             let size = min(max(min(r.width, r.height) * 0.2, 9), 14)
-            let mark = CGPoint(x: c.x, y: c.y + size * 0.55), key = CGPoint(x: c.x, y: c.y - size * 0.55)
-            let content = symbolRect("keyboard", at: mark, size: size * 0.9).union(labelRect(text, at: key, size: size))
-            let plate = content.insetBy(dx: -6, dy: -3)
+            var mark = CGPoint(x: c.x, y: c.y + size * 0.55), key = CGPoint(x: c.x, y: c.y - size * 0.55)
+            var content = symbolRect("keyboard", at: mark, size: size * 0.9).union(labelRect(text, at: key, size: size))
+            var plate = content.insetBy(dx: -6, dy: -3)
+            // Bigger than a small zone, its key goes above it (beside it at
+            // the screen's top), so the zone's outline shows; its action
+            // badges are under it, its every-mode mark at its corner.
+            if plate.width > r.width - 8 || plate.height > r.height - 8 {
+                let above = r.maxY + 12 + plate.height <= displayRect.maxY
+                let right = r.maxX + 12 + plate.width <= displayRect.maxX
+                let to = above ? CGPoint(x: c.x, y: r.maxY + 12 + plate.height / 2)
+                    : CGPoint(x: right ? r.maxX + 12 + plate.width / 2 : r.minX - 12 - plate.width / 2, y: c.y)
+                let dx = to.x - plate.midX, dy = to.y - plate.midY
+                mark = CGPoint(x: mark.x + dx, y: mark.y + dy)
+                key = CGPoint(x: key.x + dx, y: key.y + dy)
+                content = content.offsetBy(dx: dx, dy: dy)
+                plate = plate.offsetBy(dx: dx, dy: dy)
+            }
             fade(color, 0.9 * opacity).setFill()
             NSBezierPath(roundedRect: plate, xRadius: 6, yRadius: 6).fill()
             keyPlate(around: content, color: color)

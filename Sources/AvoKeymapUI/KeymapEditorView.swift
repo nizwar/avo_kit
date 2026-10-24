@@ -479,10 +479,14 @@ final class KeymapEditorView: NSView {
         if model.editingMode != editingMode { model.editingMode = editingMode }
         let hasEye = profile.controls.contains(where: isEye)
         if model.hasEye != hasEye { model.hasEye = hasEye }
-        // (Whether or not the eye has its key yet: KeymapProfile.scrollBarsOverTheAimArea once it has.)
-        let eyeAreas = profile.controls.filter(isEye).compactMap(\.fingerArea)
+        let hasMouseLock = profile.fps != nil
+        if model.hasMouseLock != hasMouseLock { model.hasMouseLock = hasMouseLock }
+        // As validation will (KeymapProfile.scrollBarsOverTheAimArea), whether or not the eye has its key yet.
+        let eyes = profile.controls.filter(isEye)
         let barsOverTheEye = Set(profile.controls.compactMap { control -> String? in
-            guard case let .scrollBar(from, to, _, _) = control.kind, eyeAreas.contains(where: { $0.touches(from: from, to: to) }) else { return nil }
+            guard case let .scrollBar(from, to, _, _) = control.kind,
+                  eyes.contains(where: { eye in eye.fingerArea?.touches(from: from, to: to) == true && profile.sharesMode(eye, control) })
+            else { return nil }
             return control.id
         })
         if model.barsOverTheEye != barsOverTheEye { model.barsOverTheEye = barsOverTheEye }
@@ -669,10 +673,22 @@ final class KeymapEditorView: NSView {
         guard let zone = control.clickZone?.area else { return }
         let after = anchor(of: control)
         let kept = zoneOffsets[control.id].flatMap { $0.zone == zone ? (dx: $0.dx, dy: $0.dy) : nil }
-        let offset = kept ?? (dx: zone.center.x - before.x, dy: zone.center.y - before.y)
+        let offset = kept ?? Self.offset(of: zone, from: before)
         let moved = zone.offsetBy(dx: after.x + offset.dx - zone.center.x, dy: after.y + offset.dy - zone.center.y)
         control.clickZone?.area = moved
         zoneOffsets[control.id] = (offset.dx, offset.dy, moved)
+    }
+
+    /// How far a zone's middle is from its button, as the player placed it.
+    /// Without one remembered from this editing: as it is, except along a
+    /// screen edge the zone touches with its button beyond its middle (the
+    /// button pushed it there, in an earlier editing): there it was around it.
+    private static func offset(of zone: NormalizedRect, from button: NormalizedPoint) -> (dx: Double, dy: Double) {
+        let edge = 1e-9
+        var dx = zone.center.x - button.x, dy = zone.center.y - button.y
+        if (zone.maxX >= 1 - edge && button.x > zone.center.x) || (zone.minX <= edge && button.x < zone.center.x) { dx = 0 }
+        if (zone.maxY >= 1 - edge && button.y > zone.center.y) || (zone.minY <= edge && button.y < zone.center.y) { dy = 0 }
+        return (dx, dy)
     }
 
     private func moveButton(_ control: inout Control, to p: NormalizedPoint) {
@@ -1533,6 +1549,8 @@ final class KeymapEditorView: NSView {
                     var twin = controls[i]
                     twin.id = uniqueID(like: twin.id, in: controls)
                     twin.modes = [copy]
+                    // Its zone sits as far from its button as the original's.
+                    zoneOffsets[twin.id] = zoneOffsets[controls[i].id]
                     controls.append(twin)
                 } else {
                     modes.append(copy)
@@ -1956,7 +1974,7 @@ final class KeymapEditorView: NSView {
         if !on {
             profile.controls[i].clickZone = nil
             setStatus(String(localized: "Clicks on the game no longer press “\(name(of: profile.controls[i]))”.", bundle: .avoSharedKit))
-        } else if profile.controls[i].layer == .locked {
+        } else if profile.fps != nil, profile.controls[i].layer == .locked {
             // Clicks press controls only while the mouse is free.
             setStatus(String(localized: "“\(name(of: profile.controls[i]))” works only while the mouse is locked, and clicks on the game press controls only while it is free.",
                              bundle: .avoSharedKit), problem: true)

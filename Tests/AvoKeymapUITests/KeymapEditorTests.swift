@@ -140,21 +140,30 @@ struct KeymapEditorTests {
 
     @Test("A control that works only with the mouse locked gets no zone: clicks press controls only while it is free")
     func lockedControlGetsNoZone() {
+        let eye = Control(id: "eye", kind: .aim(area: NormalizedRect(0.5, 0.1, 1, 0.7), sensitivity: AxisPair(x: 1, y: 1),
+                                                adsSensitivity: AxisPair(x: 1, y: 1), exponent: 1, deadzone: 0, invertY: false, stick: nil))
         let fire = Control(id: "fire", kind: .tap(NormalizedPoint(0.8, 0.7)), triggers: [.mouse(.left)], layer: .locked)
-        let editor = Editor(KeymapProfile(package: "x", name: "x", controls: [fire]))
+        let editor = Editor(KeymapProfile(package: "x", name: "x", controls: [eye, fire], fps: FPSSettings(aimControl: "eye")))
         defer { editor.close() }
         editor.model.select("fire")
         editor.model.setClickZone(true)
-        #expect(editor.profile.controls[0].clickZone == nil)
+        #expect(editor.profile.controls[1].clickZone == nil)
         #expect(editor.model.problem)
         // One it has already (from a file) can still be turned off.
         var zoned = fire
         zoned.clickZone = ClickZone(area: NormalizedRect(0.75, 0.6, 0.85, 0.8))
-        let other = Editor(KeymapProfile(package: "x", name: "x", controls: [zoned]))
+        let other = Editor(KeymapProfile(package: "x", name: "x", controls: [eye, zoned], fps: FPSSettings(aimControl: "eye")))
         defer { other.close() }
         other.model.select("fire")
         other.model.setClickZone(false)
-        #expect(other.profile.controls[0].clickZone == nil)
+        #expect(other.profile.controls[1].clickZone == nil)
+        // Without the eye's mouse lock a layer means nothing: it gets one.
+        let plain = Editor(KeymapProfile(package: "x", name: "x", controls: [fire]))
+        defer { plain.close() }
+        plain.model.select("fire")
+        #expect(!plain.model.hasMouseLock)
+        plain.model.setClickZone(true)
+        #expect(plain.profile.controls[0].clickZone != nil)
     }
 
     // MARK: Scroll bars
@@ -199,17 +208,24 @@ struct KeymapEditorTests {
         #expect(editor.saved.profile != nil, "Done refused: \(editor.model.status)")
     }
 
-    @Test("A scroll bar over the eye's area says it works only while the mouse is free")
+    @Test("A scroll bar over the eye's area in a mode the eye works in is warned about; one in another mode is not")
     func scrollBarOverTheEye() {
         let eye = Control(id: "eye", kind: .aim(area: NormalizedRect(0.5, 0.1, 1, 0.7), sensitivity: AxisPair(x: 1, y: 1),
-                                                adsSensitivity: AxisPair(x: 1, y: 1), exponent: 1, deadzone: 0, invertY: false, stick: nil))
+                                                adsSensitivity: AxisPair(x: 1, y: 1), exponent: 1, deadzone: 0, invertY: false, stick: nil),
+                          modes: ["foot"])
         let over = Control(id: "s", kind: .scrollBar(from: NormalizedPoint(0.9, 0.8), to: NormalizedPoint(0.9, 0.2), rest: 0.5, step: 0.1))
+        let map = Control(id: "m", kind: .scrollBar(from: NormalizedPoint(0.8, 0.8), to: NormalizedPoint(0.8, 0.2), rest: 0.5, step: 0.1),
+                          modes: ["map"])
         let beside = Control(id: "b", kind: .scrollBar(from: NormalizedPoint(0.2, 0.8), to: NormalizedPoint(0.2, 0.2), rest: 0.5, step: 0.1))
-        let editor = Editor(KeymapProfile(package: "x", name: "x", controls: [eye, over, beside], fps: FPSSettings(aimControl: "eye")))
-        defer { editor.close() }
-        editor.model.select("s")
-        #expect(editor.model.barsOverTheEye == ["s"])
-        #expect(editor.profile.scrollBarsOverTheAimArea == ["s"])
+        let modes = [KeymapMode(id: "foot", name: "On foot"), KeymapMode(id: "map", name: "Map")]
+        // The eye with its key, and still without one.
+        for fps in [FPSSettings(aimControl: "eye"), nil] {
+            let editor = Editor(KeymapProfile(package: "x", name: "x", controls: [eye, over, map, beside], fps: fps, modes: modes))
+            defer { editor.close() }
+            editor.model.select("s")
+            #expect(editor.model.barsOverTheEye == ["s"])
+            if fps != nil { #expect(editor.profile.scrollBarsOverTheAimArea.contains("s")) }
+        }
     }
 
     @Test("The panel's Direction turns a scroll bar on the editor's own picture")
