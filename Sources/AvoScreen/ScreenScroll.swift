@@ -33,11 +33,11 @@ public struct ScrollRegion: Sendable, Equatable {
     public let rows: Int
 
     /// Pixels per cell along the axis.
-    static let fineCell = 4.0
+    public static let fineCell = 4.0
     /// Pixels per cell across the axis.
-    static let coarseCell = 40.0
-    static let maxFine = 320
-    static let maxCoarse = 32
+    public static let coarseCell = 40.0
+    public static let maxFine = 320
+    public static let maxCoarse = 32
 
     public init(rect: CGRect, columns: Int, rows: Int) {
         self.rect = rect
