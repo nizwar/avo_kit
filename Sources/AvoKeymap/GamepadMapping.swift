@@ -657,9 +657,17 @@ extension KeymapProfile {
     /// back, the others none (a D-pad of the d-pad's buttons stays, and its
     /// directions with it). Bindings that no longer fit (a control that is
     /// gone or changed kind, a button a direction holds) are left out; their
-    /// number is returned.
+    /// number is returned. A control that only the controller pressed and
+    /// that the preset leaves with no button keeps the ones it had: with
+    /// nothing to press it, the layout could not be saved.
     @discardableResult
     public mutating func apply(_ preset: GamepadPreset) -> Int {
+        let before = Dictionary(controls.map { ($0.id, $0.triggers) }, uniquingKeysWith: { first, _ in first })
+        defer {
+            for i in controls.indices where controls[i].triggers.isEmpty {
+                if let triggers = before[controls[i].id], !triggers.isEmpty, triggers.allSatisfy(\.isGamepad) { controls[i].triggers = triggers }
+            }
+        }
         for element in [GamepadElement.dpad] + GamepadStick.allCases.map(GamepadElement.stick)
             + GamepadButton.allCases.map(GamepadElement.button) {
             unbind(element)

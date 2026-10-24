@@ -393,22 +393,6 @@
         }
       }
     },
-    "%@: size must be between %lf and %lf" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@: size must be between %2$lf and %3$lf"
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: ukuran harus antara %2$lf dan %3$lf"
-          }
-        }
-      }
-    },
     "%@: swipe duration must be 30–2000 ms" : {
       "localizations" : {
         "id" : {
@@ -4379,6 +4363,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "stik kanan"
+          }
+        }
+      }
+    },
+    "the wheel cannot lock and free the mouse" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "roda mouse tidak bisa mengunci dan melepas mouse"
           }
         }
       }

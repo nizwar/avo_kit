@@ -345,7 +345,6 @@ public struct Control: Hashable, Sendable, Codable, Identifiable {
     public var reset: Trigger?
 
     public static let defaultSize = 0.035
-    public static let sizeRange = 0.012...0.3
     /// A MOBA joystick's radius, as a fraction of the display height.
     public static let defaultJoystickRadius = 0.12
     /// How far a smart cast drags the skill button at most, and how far the
@@ -810,16 +809,25 @@ private struct ControlEntry: Decodable {
     /// A Switch Mode or Free/Lock the Mouse control of Avo before actions, read as a hotkey.
     var legacy = false
 
-    private enum CodingKeys: String, CodingKey { case type }
+    private enum CodingKeys: String, CodingKey { case type, actions }
 
     init(from decoder: any Decoder) throws {
-        let type = try decoder.container(keyedBy: CodingKeys.self).decode(String.self, forKey: .type)
-        if Control.knownTypes.contains(type) {
-            control = try Control(from: decoder)
-            legacy = Control.legacyTypes.contains(type)
-        } else {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try c.decode(String.self, forKey: .type)
+        guard Control.knownTypes.contains(type) else {
             unsupportedType = type
+            return
         }
+        let control = try Control(from: decoder)
+        // A hotkey or click area that only does what a newer Avo can is left
+        // out with it, like a kind this version does not know, rather than
+        // kept doing nothing, which no layout may (KeymapProfile.validate).
+        if !control.touchesTheScreen, control.actions.isEmpty, ((try? c.nestedUnkeyedContainer(forKey: .actions))?.count ?? 0) > 0 {
+            unsupportedType = type
+            return
+        }
+        self.control = control
+        legacy = Control.legacyTypes.contains(type)
     }
 }
 
@@ -1083,6 +1091,8 @@ extension KeymapProfile {
                 return problems
             }
             if aims.count > 1 { problems.append(String(localized: "FPS mode supports one aim control", bundle: .avoSharedKit)) }
+            // A notch has no release: it would lock and free the mouse again and again.
+            if fps.cursorToggle.isMomentary { problems.append(String(localized: "the wheel cannot lock and free the mouse", bundle: .avoSharedKit)) }
             for control in controls {
                 switch control.kind {
                 case .repeatTap:
@@ -1105,9 +1115,7 @@ extension KeymapProfile {
         func point(_ p: NormalizedPoint) {
             if !p.isInside { problems.append(String(localized: "\(name): position \(String(describing: p.x)), \(String(describing: p.y)) is outside the screen", bundle: .avoSharedKit)) }
         }
-        if let size = control.size, !Control.sizeRange.contains(size) {
-            problems.append(String(localized: "\(name): size must be between \(Control.sizeRange.lowerBound) and \(Control.sizeRange.upperBound)", bundle: .avoSharedKit))
-        }
+        // (`size` is read and kept as it is: it changes nothing any more.)
         switch control.kind {
         case .tap(let p), .hold(let p), .ads(let p, _), .anchor(let p, _):
             point(p)

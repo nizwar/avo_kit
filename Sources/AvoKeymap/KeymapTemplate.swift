@@ -96,7 +96,7 @@ public enum KeymapTemplate: String, CaseIterable, Sendable {
     }
 
     /// Puts the template into `profile`. Replacing swaps every control (and
-    /// the FPS settings) for the template's; adding keeps every existing
+    /// the FPS settings) for the template's, and leaves no modes; adding keeps every existing
     /// control exactly as it is, and the template's controls give way
     /// wherever they would clash with them. Either way the player's hero
     /// point stays.
@@ -106,6 +106,8 @@ public enum KeymapTemplate: String, CaseIterable, Sendable {
         if replacing {
             result.controls = layout.controls
             result.fps = layout.fps
+            // The old layout's modes went with its controls (and their switches).
+            result.modes = []
             return Insertion(profile: result, added: layout.controls.map(\.id), unbound: [], skipped: [])
         }
 

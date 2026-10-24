@@ -135,6 +135,12 @@ public struct KeymapEngine: Sendable {
     /// The repeat taps tapping now: one chain each, whether its key, another
     /// of its keys or its click zone holds it.
     private var repeating: Set<String> = []
+    /// Until when each swipe or macro runs: a press meanwhile (a wheel's
+    /// next notch) starts no second one beside it.
+    private var runningUntil: [String: TimeInterval] = [:]
+    /// The finger of a tap or hold let go before its shortest time, until
+    /// it lifts: pressed again by then, the same finger stays down.
+    private var liftingSoon: [String: Int] = [:]
     /// Where each scroll bar's thumb is, as a fraction of its track (its
     /// rest point until the wheel moves it), and how often the wheel has
     /// turned it, so only the last notch's release lets go.
@@ -233,6 +239,12 @@ public struct KeymapEngine: Sendable {
             // A click whose release never came ends first: what it pressed
             // lets go, its finger lifts.
             endClick(at: now)
+            // With the mouse locked, the hidden cursor is parked at the
+            // window's middle: a click no control took touches nothing there.
+            if pointerLocked {
+                clickSwallowed = true
+                break
+            }
             // The cursor is where the click is: an anchor it presses follows
             // the cursor from here.
             cursor = (x, y)
@@ -310,13 +322,19 @@ public struct KeymapEngine: Sendable {
         anchors.removeAll()
         heldSince.removeAll()
         glides.removeAll()
+        // The sticks' next changes may never come here (the editor, another
+        // window has them): a stale one would go on aiming.
+        sticks.removeAll()
         stickRestingSince.removeAll()
+        lastTick = nil
         cursor = nil
         dragCursor = nil
         clickFinger = nil
         clickSwallowed = false
         zonePressed.removeAll()
         repeating.removeAll()
+        runningUntil.removeAll()
+        liftingSoon.removeAll()
         adsActive = false
         pointerLocked = false
         flushMoves()
@@ -346,7 +364,11 @@ public struct KeymapEngine: Sendable {
             glides[controlID] = nil
             if case .ads = control.kind { adsActive = false }
         }
-        if !locked { adsActive = false }
+        // (A toggled Aim Down Sights stays on: the game is still aiming down sights.)
+        // The joysticks of the new layer take the keys still held.
+        for control in controls where isActive(control) {
+            if case .dpad = control.kind { updateDPad(control, smoothly: false) }
+        }
         // A click's finger belongs to the cursor, which locking hides and
         // parks (and freeing moves).
         if let clickFinger {
@@ -361,10 +383,15 @@ public struct KeymapEngine: Sendable {
         return takeEvents()
     }
 
+    /// Lifts every touch for the new size. The mouse stays as the host keeps
+    /// it (a rotation, full screen mid-fight): still locked, the eye's finger
+    /// goes down again on the new size.
     public mutating func resize(width: Double, height: Double) -> [TouchEvent] {
-        let events = reset()
+        let locked = pointerLocked
+        var events = reset()
         self.width = width
         self.height = height
+        if locked { events += setPointerLocked(true) }
         return events
     }
 
@@ -559,7 +586,12 @@ public struct KeymapEngine: Sendable {
             guard !stillHeld, let touch = held.removeValue(forKey: control.id) else { return }
             let earliest = (heldSince.removeValue(forKey: control.id) ?? now) + Double(Self.tapDurationMilliseconds) / 1000
             // A quick press still gives the app a whole tap.
-            if now < earliest { enqueue(earliest, .lift(touch: touch)) } else { lift(touch) }
+            if now < earliest {
+                enqueue(earliest, .lift(touch: touch))
+                liftingSoon[control.id] = touch
+            } else {
+                lift(touch)
+            }
         case .ads(_, let toggle) where !toggle:
             guard !stillHeld else { return }
             if let touch = held.removeValue(forKey: control.id) { lift(touch) }
@@ -595,7 +627,7 @@ public struct KeymapEngine: Sendable {
             if trigger.isMomentary {
                 // A wheel notch has no release: a short tap.
                 tap(point, at: now)
-            } else if held[control.id] == nil, let touch = down(point) {
+            } else if held[control.id] == nil, let touch = takeBackLift(of: control.id) ?? down(point) {
                 // Down while the key is down, like a finger: a tap or a hold.
                 held[control.id] = touch
                 heldSince[control.id] = now
@@ -613,7 +645,9 @@ public struct KeymapEngine: Sendable {
         case .aim:
             break
         case let .swipe(from, to, ms):
-            guard let touch = down(from) else { return }
+            // One at a time: a finger cannot start a swipe in the middle of one.
+            guard (runningUntil[control.id] ?? -.infinity) <= now, let touch = down(from) else { return }
+            runningUntil[control.id] = now + Double(ms) / 1000
             let steps = max(2, ms / Self.swipeStepMilliseconds)
             for step in 1...steps {
                 let t = Double(step) / Double(steps)
@@ -629,7 +663,9 @@ public struct KeymapEngine: Sendable {
             guard repeating.insert(control.id).inserted else { return }
             tap(point, at: now)
             enqueue(now + Double(interval) / 1000, .repeatTap(control: control.id))
-        case .macro:
+        case .macro(let steps):
+            guard (runningUntil[control.id] ?? -.infinity) <= now else { return }
+            runningUntil[control.id] = now + Double(steps.reduce(0) { $0 + $1.duration }) / 1000
             runMacroStep(control, index: 0, at: now)
         case let .anchor(point, radius):
             guard held[control.id] == nil, let touch = down(point) else { return }
@@ -759,6 +795,14 @@ public struct KeymapEngine: Sendable {
     private mutating func tap(_ point: NormalizedPoint, at now: TimeInterval) {
         guard let touch = down(point) else { return }
         enqueue(now + Double(Self.tapDurationMilliseconds) / 1000, .lift(touch: touch))
+    }
+
+    /// The finger of a tap or hold pressed again before its last press's
+    /// finger lifted: it stays down instead of a second beside it.
+    private mutating func takeBackLift(of controlID: String) -> Int? {
+        guard let touch = liftingSoon.removeValue(forKey: controlID), touches.contains(where: { $0.id == touch }) else { return nil }
+        schedule.removeAll { if case .lift(touch) = $0.action { true } else { false } }
+        return touch
     }
 
     private mutating func runMacroStep(_ control: Control, index: Int, at now: TimeInterval) {
@@ -977,6 +1021,7 @@ public struct KeymapEngine: Sendable {
             switch next.element.action {
             case .lift(let touch):
                 lift(touch)
+                if let pending = liftingSoon.first(where: { $0.value == touch }) { liftingSoon[pending.key] = nil }
             case let .move(touch, x, y):
                 move(touch, x: x * width, y: y * height)
             case .repeatTap(let controlID):
