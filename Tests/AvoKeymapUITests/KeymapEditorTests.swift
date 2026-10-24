@@ -344,6 +344,38 @@ struct KeymapEditorTests {
         #expect(rows["h"]?.keys == nil && rows["h"]?.needsKey == true, "a hotkey still waits for its key")
     }
 
+    // MARK: The eye
+
+    @Test("Removing the eye takes away what only locked or freed the mouse, and the layout still saves")
+    func removingTheEye() {
+        let eye = Control(id: "eye", kind: .aim(area: NormalizedRect(0.5, 0.1, 1, 0.7), sensitivity: AxisPair(x: 1, y: 1),
+                                                adsSensitivity: AxisPair(x: 1, y: 1), exponent: 1, deadzone: 0, invertY: false, stick: nil))
+        let bag = Control(id: "bag", kind: .tap(NormalizedPoint(0.05, 0.05)), triggers: [.key(.tab)], actions: [.freeMouse, .switchMode("b")])
+        let free = Control(id: "free", kind: .hotkey, triggers: [.key(.g)], actions: [.freeMouse])
+        let editor = Editor(KeymapProfile(package: "x", name: "x", controls: [eye, bag, free], fps: FPSSettings(aimControl: "eye"),
+                                          modes: [KeymapMode(id: "a", name: "A"), KeymapMode(id: "b", name: "B")]))
+        defer { editor.close() }
+        editor.model.select("eye")
+        editor.model.remove()
+        #expect(editor.profile.controls.map(\.id) == ["bag"])
+        #expect(editor.profile.controls[0].actions == [.switchMode("b")])
+        #expect(editor.profile.validate().isEmpty, "\(editor.profile.validate())")
+        editor.model.done()
+        #expect(editor.saved.profile != nil, "Done refused: \(editor.model.status)")
+    }
+
+    @Test("The wheel cannot be the eye's key")
+    func theEyesKeyIsNotTheWheel() {
+        let eye = Control(id: "eye", kind: .aim(area: NormalizedRect(0.5, 0.1, 1, 0.7), sensitivity: AxisPair(x: 1, y: 1),
+                                                adsSensitivity: AxisPair(x: 1, y: 1), exponent: 1, deadzone: 0, invertY: false, stick: nil))
+        let editor = Editor(KeymapProfile(package: "x", name: "x", controls: [eye], fps: FPSSettings(aimControl: "eye")))
+        defer { editor.close() }
+        editor.model.select("eye")
+        editor.view.assign(.scrollUp)
+        #expect(editor.profile.fps?.cursorToggle == FPSSettings.defaultCursorToggle)
+        #expect(editor.model.problem)
+    }
+
     @Test("Every kind has a category, and the panel groups them")
     func categories() {
         #expect(KeymapCategory.general.items == [.tap, .repeatTap, .anchor, .joystick, .swipe, .scrollBar, .clickArea, .hotkey])

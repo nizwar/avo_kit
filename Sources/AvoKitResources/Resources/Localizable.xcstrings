@@ -2933,6 +2933,22 @@
         }
       }
     },
+    "Removed “%@”, and what only locked or freed the mouse: %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Removed “%1$@”, and what only locked or freed the mouse: %2$@."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%1$@” dihapus, beserta yang hanya mengunci atau melepas mouse: %2$@."
+          }
+        }
+      }
+    },
     "Removed “%@”." : {
       "localizations" : {
         "id" : {
@@ -3735,6 +3751,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Roda mouse tidak bisa ditahan untuk lari: tekan sebuah tombol."
+          }
+        }
+      }
+    },
+    "The wheel cannot lock and free the mouse: press a key or a button." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Roda mouse tidak bisa mengunci dan melepas mouse: tekan tombol keyboard atau tombol mouse."
           }
         }
       }

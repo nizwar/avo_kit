@@ -248,6 +248,19 @@ struct KeymapControllerTests {
         #expect(host.touches.first == "7 down 0@2160,540")
     }
 
+    @Test("The mouse lock's key, held down, keeps its repeats from the game")
+    func theMouseLocksKeyRepeatsStayTheMappings() {
+        let eye = Control(id: "eye", kind: .aim(area: NormalizedRect(0.5, 0.1, 1, 0.7), sensitivity: AxisPair(x: 1, y: 1),
+                                                adsSensitivity: AxisPair(x: 1, y: 1), exponent: 1, deadzone: 0, invertY: false, stick: nil))
+        let host = Host(gameMode: true, bundled: KeymapProfile(package: "com.example.game", name: "FPS", controls: [eye],
+                                                               fps: FPSSettings(cursorToggle: .key(.tab), aimControl: "eye")))
+        let keymap = host.controller()
+        defer { keymap.stop() }
+        // (Only repeats: a press would lock the real mouse.)
+        #expect(keymap.key(.tab, down: true, isRepeat: true))
+        #expect(!keymap.key(.g, down: true, isRepeat: true), "a key the mapping does not use is the game's")
+    }
+
     @Test("Without a profile, Game Mode says how to set one up and maps nothing")
     func noProfileMapsNothing() {
         let host = Host()

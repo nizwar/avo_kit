@@ -794,9 +794,27 @@ final class KeymapEditorView: NSView {
         guard let index = index(of: id) else { return }
         let control = profile.controls.remove(at: index)
         if profile.fps?.aimControl == id { profile.fps = nil }
-        if selected == id { selected = nil }
-        setStatus(String(localized: "Removed “\(name(of: control))”.", bundle: .avoSharedKit))
+        let gone = dropMouseActionsWithoutTheEye()
+        if let selected, selected == id || !profile.controls.contains(where: { $0.id == selected }) { self.selected = nil }
+        if gone.isEmpty {
+            setStatus(String(localized: "Removed “\(name(of: control))”.", bundle: .avoSharedKit))
+        } else {
+            setStatus(String(localized: "Removed “\(name(of: control))”, and what only locked or freed the mouse: \(gone.formatted(.list(type: .and))).",
+                             bundle: .avoSharedKit))
+        }
         needsDisplay = true
+    }
+
+    /// Without the eye nothing locks or frees the mouse: those actions go,
+    /// and a hotkey or click area that did nothing else goes with them (a
+    /// layout that keeps them cannot be saved). Their names are returned.
+    @discardableResult
+    private func dropMouseActionsWithoutTheEye() -> [String] {
+        guard profile.fps == nil, profile.controls.contains(where: { $0.actions.contains(where: \.isMouse) }) else { return [] }
+        let emptied = profile.controls.filter { !$0.touchesTheScreen && !$0.actions.isEmpty && $0.actions.allSatisfy(\.isMouse) }
+        for i in profile.controls.indices { profile.controls[i].actions.removeAll(where: \.isMouse) }
+        profile.controls.removeAll { control in emptied.contains { $0.id == control.id } }
+        return emptied.map { "“\(name(of: $0))”" }
     }
 
     /// Binds `trigger` to the selected object. A key may do several things
@@ -835,6 +853,11 @@ final class KeymapEditorView: NSView {
             dpadSlot = (dpadSlot + 1) % 4
             setStatus(String(localized: "D-pad \(direction(set)): \(short(trigger)). Next key sets \(direction(dpadSlot)).", bundle: .avoSharedKit))
         case .aim:
+            // A notch has no release: it would lock and free the mouse again and again.
+            guard !trigger.isMomentary else {
+                setStatus(String(localized: "The wheel cannot lock and free the mouse: press a key or a button.", bundle: .avoSharedKit), problem: true)
+                return
+            }
             if profile.fps == nil {
                 profile.fps = FPSSettings(cursorToggle: trigger, aimControl: id)
             } else {
@@ -1428,6 +1451,7 @@ final class KeymapEditorView: NSView {
             profile.modes.removeAll { $0.id == id }
         }
         if let fps = profile.fps, !profile.controls.contains(where: { $0.id == fps.aimControl }) { profile.fps = nil }
+        dropMouseActionsWithoutTheEye()
         selected = nil
         pendingTap = nil
         if editingMode == id || profile.modes.isEmpty { editingMode = profile.firstMode }
@@ -2595,8 +2619,14 @@ final class KeymapEditorView: NSView {
         let before = Set(profile.controls.map(\.id))
         let insertion = template.insert(into: profile, replacing: replacing, aspect: rect.height > 0 ? rect.width / rect.height : 16.0 / 9.0)
         profile = insertion.profile
-        if let editingMode {
-            for i in profile.controls.indices where !before.contains(profile.controls[i].id) { profile.controls[i].modes = [editingMode] }
+        if replacing {
+            // A layout of its own, without the old one's modes.
+            editingMode = profile.firstMode
+        } else if let editingMode {
+            // The new controls act in the mode being edited; an eye, as always, in every mode.
+            for i in profile.controls.indices where !before.contains(profile.controls[i].id) && !isEye(profile.controls[i]) {
+                profile.controls[i].modes = [editingMode]
+            }
         }
         selected = nil
         pendingTap = nil

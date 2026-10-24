@@ -158,7 +158,12 @@ public final class KeymapController {
     public func key(_ key: KeyName, down: Bool, isRepeat: Bool) -> Bool {
         if overlay?.isEditing == true { return overlay?.assign(.key(key), down: down) ?? false }
         guard mapping else { return false }
-        guard !isRepeat else { return engine?.profile.controls.contains { $0.allTriggers.contains(.key(key)) } == true }
+        // A held key's repeats are the mapping's when its press was: the
+        // mouse lock's key too, or the game would get them (and never their keyUp).
+        guard !isRepeat else {
+            guard let profile = engine?.profile else { return false }
+            return profile.fps?.cursorToggle == .key(key) || profile.controls.contains { $0.allTriggers.contains(.key(key)) }
+        }
         if !down, letGoUnseen.remove(.key(key)) != nil { return true }
         if down {
             letGoUnseen.remove(.key(key))
@@ -317,7 +322,14 @@ public final class KeymapController {
     }
 
     private func handle(_ input: KeymapEngine.Input) -> Bool {
-        guard var engine else { return false }
+        run(input)?.consumed ?? false
+    }
+
+    /// The engine's answer to `input`, its touches sent, the mode and the
+    /// mouse lock followed; nil without an engine.
+    @discardableResult
+    private func run(_ input: KeymapEngine.Input) -> KeymapEngine.Output? {
+        guard var engine else { return nil }
         let output = engine.handle(input, at: CACurrentMediaTime())
         self.engine = engine
         emit(output.events)
@@ -330,7 +342,7 @@ public final class KeymapController {
         if let lock = output.pointerLock {
             if lock { lockPointer() } else { unlockPointer() }
         }
-        return output.consumed
+        return output
     }
 
     private func emit(_ events: [TouchEvent]) {
@@ -399,10 +411,11 @@ public final class KeymapController {
         let now = CACurrentMediaTime()
         if isPointerLocked { flushHeldMotion(at: now) }
         releaseUnseen(at: now)
-        guard var engine else { return }
+        // The editor has the keys (the engine was reset as it opened): nothing to do.
+        guard mapping, var engine else { return }
         // A held MOBA control or click reads the cursor on every frame: while
         // a mouse button is down macOS sends drags, which never reach pointerMoved.
-        if engine.isFollowingCursor, mapping, !isPointerLocked, let cursor = cursorInDisplay() {
+        if engine.isFollowingCursor, !isPointerLocked, let cursor = cursorInDisplay() {
             emit(engine.handle(.cursor(x: cursor.x, y: cursor.y), at: now).events)
         }
         emit(engine.tick(at: now))
@@ -522,9 +535,11 @@ public final class KeymapController {
         for input in inputs {
             if case .gamepadButton(_, true) = input {
                 reportCursor()
-                touched = handle(input) || touched
+                // A finger went down (a hotkey's switch alone touches nothing).
+                let output = run(input)
+                touched = touched || output?.events.contains { $0.action == .down || $0.action == .pointerDown } == true
             } else {
-                _ = handle(input)
+                run(input)
             }
         }
         if touched, profile?.gamepadSettings.vibration == true { GamepadHub.shared.pulse() }
