@@ -165,6 +165,8 @@ final class KeymapEditorModel: ObservableObject {
         var symbol: String
         /// Its keys as they are written ("F", "W A S D"); nil without one.
         var keys: String?
+        /// Without keys, it waits for one ("?"); a click area takes none.
+        var needsKey = true
         var category: KeymapCategory
         var actions: [ControlAction]
     }
@@ -463,7 +465,7 @@ private struct ControlListRow: View {
                 Text(verbatim: row.title)
                     .font(QuickHaze.mona(12, selected ? 620 : 500))
                     .lineLimit(1)
-                if let keys = row.keys { KeyCap(text: keys) } else { KeyCap(text: "?", waiting: true) }
+                if let keys = row.keys { KeyCap(text: keys) } else if row.needsKey { KeyCap(text: "?", waiting: true) }
                 Spacer(minLength: 4)
                 ForEach(Array(row.actions.enumerated()), id: \.offset) { _, action in
                     Image(systemName: action.symbol)
@@ -777,11 +779,18 @@ private struct InspectorCard: View {
     }
 
     /// Its key and controller button ("Press a key" while it has none), and
-    /// a mouse button or the wheel instead; the eye's is the mouse lock.
+    /// a mouse button or the wheel instead; the eye's is the mouse lock, and
+    /// a scroll bar's the wheel (its reset key is a setting of its own).
     @ViewBuilder private var keys: some View {
         switch selection.control.kind {
         case .dpad, .clickArea:
             EmptyView()
+        case .scrollBar:
+            InspectorRow(label: L("Key")) {
+                KeyCap(text: L("Wheel"), symbol: "computermouse")
+                    .help(L("A scroll bar follows the wheel. To give it a reset key, click Reset key in the panel, then press the key."))
+                Spacer(minLength: 0)
+            }
         case .aim:
             InspectorRow(label: L("Mouse lock key")) {
                 KeyCap(text: selection.eyeKey ?? L("Press a key"), symbol: "lock", waiting: selection.eyeKey == nil)

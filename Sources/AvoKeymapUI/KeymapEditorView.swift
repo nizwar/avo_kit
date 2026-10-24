@@ -454,9 +454,12 @@ final class KeymapEditorView: NSView {
         if model.selection != selection { model.selection = selection }
         let listed = shownControls.map { control in
             let keys = control.allTriggers.map(\.shortLabel)
+            // A click area is clicked, not pressed: no key to wait for.
+            let needsKey = { if case .clickArea = control.kind { false } else { true } }()
             return KeymapEditorModel.Listed(id: control.id, title: name(of: control), symbol: Self.symbol(of: control),
                                             keys: isEye(control) ? profile.fps?.cursorToggle.shortLabel
                                                 : keys.isEmpty ? nil : keys.joined(separator: " "),
+                                            needsKey: needsKey,
                                             category: KeymapPaletteItem.item(for: control)?.category ?? .general, actions: control.actions)
         }
         if model.listed != listed { model.listed = listed }

@@ -571,8 +571,11 @@ struct KeymapPainter {
         NSBezierPath(roundedRect: plate, xRadius: radius, yRadius: radius).fill()
     }
 
+    /// Its keys, "?" while it waits for one; a scroll bar's is the wheel (its
+    /// reset key is under it).
     private func triggerText(_ control: Control) -> String {
-        control.triggers.isEmpty ? "?" : control.triggers.map { $0.shortLabel }.joined(separator: " ")
+        if case .scrollBar = control.kind { return String(localized: "Wheel", bundle: .avoSharedKit) }
+        return control.triggers.isEmpty ? "?" : control.triggers.map { $0.shortLabel }.joined(separator: " ")
     }
 
     /// The eye's keys: the key that locks the mouse for it and its stick ("F8 RS"), "?" with neither.
