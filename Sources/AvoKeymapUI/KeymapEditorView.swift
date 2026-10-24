@@ -846,7 +846,15 @@ final class KeymapEditorView: NSView {
             }
             profile.controls[index].reset = trigger
             dpadSlot = 0
-            setStatus(String(localized: "\(short(trigger)) drags the thumb back to where it rests.", bundle: .avoSharedKit))
+            // What else the key does in this mode, so a shared key is no surprise.
+            let others = shownControls.filter { $0.id != id && $0.allTriggers.contains(trigger) }.map { "“\(name(of: $0))”" }
+                + (profile.fps?.cursorToggle == trigger ? [String(localized: "the mouse lock", bundle: .avoSharedKit)] : [])
+            if others.isEmpty {
+                setStatus(String(localized: "\(short(trigger)) drags the thumb back to where it rests.", bundle: .avoSharedKit))
+            } else {
+                setStatus(String(localized: "“\(name(of: control))” resets with \(short(trigger)), together with \(others.formatted(.list(type: .and))).",
+                                 bundle: .avoSharedKit))
+            }
         case .scrollBar:
             setStatus(String(localized: "A scroll bar follows the wheel. To give it a reset key, click Reset key in the panel, then press the key.",
                              bundle: .avoSharedKit))

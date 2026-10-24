@@ -4467,6 +4467,22 @@
         }
       }
     },
+    "“%@” resets with %@, together with %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "“%1$@” resets with %2$@, together with %3$@."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%1$@” direset dengan %2$@, bersama %3$@."
+          }
+        }
+      }
+    },
     "“%@” responds to %@, together with %@." : {
       "localizations" : {
         "en" : {
