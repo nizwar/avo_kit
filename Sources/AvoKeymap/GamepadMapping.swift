@@ -590,6 +590,7 @@ extension KeymapProfile {
                 controls[i].triggers.removeAll { $0 == .gamepad(button) }
                 if GamepadElement.dpadButtons.contains(button) { controls[i].dpadButtons = false }
                 if controls[i].run?.trigger == .gamepad(button) { controls[i].run = nil }
+                if controls[i].reset == .gamepad(button) { controls[i].reset = nil }
             case .stick(let stick):
                 if controls[i].stick == stick { controls[i].kind = controls[i].kind.with(stick: nil) }
             case .dpad:
@@ -610,14 +611,14 @@ extension KeymapProfile {
     }
 
     /// The controls that only the controller works: nothing on the keyboard
-    /// or mouse presses them, or an eye that a stick drives and the mouse
-    /// does not (no FPS mode for it).
+    /// or mouse presses them (a click on a click zone is the mouse), or an
+    /// eye that a stick drives and the mouse does not (no FPS mode for it).
     public var controllerOnlyControls: [String] {
         controls.filter { control in
             switch control.kind {
             case .dpad: control.isDPadOfButtons
             case .aim: control.stick != nil && fps?.aimControl != control.id
-            default: !control.triggers.isEmpty && control.triggers.allSatisfy(\.isGamepad)
+            default: !control.triggers.isEmpty && control.triggers.allSatisfy(\.isGamepad) && control.clickZone == nil
             }
         }.map(\.id)
     }

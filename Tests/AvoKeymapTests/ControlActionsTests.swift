@@ -221,7 +221,7 @@ private func legacyJSON(_ controls: String, fps: Bool = true) -> Data {
         let problems = profile.validate()
         #expect(problems.contains("a: does nothing yet: add an action"))
         #expect(problems.contains("b: does nothing yet: add an action"))
-        #expect(problems.contains("c: a joystick or the eye cannot do actions"))
+        #expect(problems.contains("c: this kind of control cannot do actions"))
         #expect(problems.contains("d: locking or freeing the mouse needs the eye (mouse look)"))
         #expect(problems.contains("f: click area is invalid"))
         // The wheel may switch the mode.

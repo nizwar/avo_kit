@@ -113,16 +113,6 @@
         }
       }
     },
-    "%@: a joystick or the eye cannot do actions" : {
-      "localizations" : {
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@: joystick atau mata tidak bisa menjalankan aksi"
-          }
-        }
-      }
-    },
     "%@: a step must be 1 to 50%% of the track" : {
       "localizations" : {
         "id" : {
@@ -495,6 +485,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@: jenis kontrol ini tidak bisa diklik"
+          }
+        }
+      }
+    },
+    "%@: this kind of control cannot do actions" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: jenis kontrol ini tidak bisa menjalankan aksi"
           }
         }
       }

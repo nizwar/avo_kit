@@ -364,6 +364,10 @@ public struct Control: Hashable, Sendable, Codable, Identifiable {
     public static let defaultScrollRest = 0.5
     /// The shortest track the editor makes, as a fraction of the display height.
     public static let minimumScrollTrack = 0.05
+    /// The shortest track a layout may have, in fractions of the screen's
+    /// sides: shorter than the editor's shortest on any screen up to 4:1,
+    /// where across it that is a quarter of `minimumScrollTrack`.
+    public static let shortestScrollTrack = minimumScrollTrack / 4
 
     public init(id: String, kind: Kind, triggers: [Trigger] = [], layer: ControlLayer? = nil, modes: [String]? = nil,
                 size: Double? = nil, dpadButtons: Bool = false, run: JoystickRun? = nil, actions: [ControlAction] = [],
@@ -487,6 +491,9 @@ public struct Control: Hashable, Sendable, Codable, Identifiable {
         default:
             throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown control type \(type)")
         }
+        // A zone on a kind this version cannot click (a newer Avo may) is no
+        // zone, rather than a layout that does not load.
+        if !canHaveClickZone { clickZone = nil }
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -735,7 +742,7 @@ public struct ClickZone: Hashable, Sendable, Codable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         area = try c.decode(NormalizedRect.self, forKey: .area)
-        // A shape from a newer Avo is the plain one.
+        // A shape from a newer Avo, or none, is the usual one: rounded.
         shape = ((try? c.decodeIfPresent(Shape.self, forKey: .shape)) ?? nil) ?? .rounded
     }
 
@@ -787,13 +794,16 @@ private struct ControlEntry: Decodable {
 extension KeymapProfile {
     /// Avo's controls before actions, made actions: a Switch Mode or a
     /// Free/Lock the Mouse control on exactly the keys of a control of the
-    /// game in exactly its modes (F: the game's Enter vehicle button, and
-    /// the switch to the vehicle) becomes that control's action; others on
-    /// the same keys in the same modes join one hotkey, in their order. A
-    /// press does what it did: the touches first, then the actions.
+    /// game in exactly its modes and layer (F: the game's Enter vehicle
+    /// button, and the switch to the vehicle) becomes that control's action;
+    /// others on the same keys in the same modes and layer join one hotkey,
+    /// in their order. Controls with a click zone stay apart (a click did
+    /// one's part, not the other's): such a legacy control is a hotkey of its
+    /// own, its zone with it. A press does what it did: the touches first, then the actions.
     static func mergingLegacyControls(_ controls: [Control], legacy: Set<Int>) -> [Control] {
         func same(_ a: Control, _ b: Control) -> Bool {
             !a.triggers.isEmpty && Set(a.triggers) == Set(b.triggers) && a.modes.map(Set.init) == b.modes.map(Set.init)
+                && a.layer == b.layer && a.clickZone == nil && b.clickZone == nil
         }
         // The game's button for each (anywhere in the layout: a switch may come before its button).
         var carried: [Int: [ControlAction]] = [:]
@@ -1082,7 +1092,7 @@ extension KeymapProfile {
         case let .scrollBar(from, to, rest, step):
             point(from)
             point(to)
-            if hypot(to.x - from.x, to.y - from.y) < Control.minimumScrollTrack / 2 {
+            if hypot(to.x - from.x, to.y - from.y) < Control.shortestScrollTrack {
                 problems.append(String(localized: "\(name): the scroll bar's track is too short", bundle: .avoSharedKit))
             }
             if !(0...1).contains(rest) { problems.append(String(localized: "\(name): the rest point must be on the track", bundle: .avoSharedKit)) }
@@ -1159,7 +1169,7 @@ extension KeymapProfile {
             if !control.canHaveClickZone { problems.append(String(localized: "\(name): this kind of control cannot be clicked", bundle: .avoSharedKit)) }
         }
         if !control.actions.isEmpty, !control.canCarryActions {
-            problems.append(String(localized: "\(name): a joystick or the eye cannot do actions", bundle: .avoSharedKit))
+            problems.append(String(localized: "\(name): this kind of control cannot do actions", bundle: .avoSharedKit))
         }
         return problems
     }
