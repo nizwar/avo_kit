@@ -528,9 +528,12 @@ final class KeymapEditorView: NSView {
             if let edges = edges(of: selectedArea.rect, near: p) { return .areaEdge(selectedArea.id, edges) }
             if selectedArea.movable, selectedArea.rect.contains(p) { return .area(selectedArea.id) }
         }
-        // A click area is the rectangle itself: a click inside picks it.
-        for control in newestFirst {
+        // A click area is the rectangle itself: a click inside picks it. A
+        // hotkey's click zone is its only place on the game: a click inside
+        // picks the hotkey, and a drag moves the zone.
+        for control in shownControls.reversed() {
             if case .clickArea(let area, _) = control.kind, painter.rect(of: area).contains(p) { return .body(control.id) }
+            if !control.isOnGame, let zone = control.clickZone, painter.rect(of: zone.area).contains(p) { return .area(control.id) }
         }
         return nil
     }
@@ -1887,8 +1890,9 @@ final class KeymapEditorView: NSView {
         painter.modeNames = Dictionary(profile.modes.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
         let eyeKey = profile.fps?.cursorToggle.shortLabel
         // Only the mode being edited (all of the layout without modes), and
-        // no hotkeys: they have no place on the game.
+        // no hotkeys: they have no place on the game, but for a click zone.
         let shown = placedControls
+        let zoned = shownControls.filter { $0.clickZone != nil && $0.canHaveClickZone }
         // Lit as if selected: where a dragged part of the controller would
         // bind, and what the part under the pointer in the panel drives.
         let dropTarget = padDrag.flatMap { dropTarget(for: $0.element, at: $0.at) }
@@ -1902,8 +1906,8 @@ final class KeymapEditorView: NSView {
                 painter.drawClickArea(control, selected: control.id == selected, hovered: control.id == hovered?.controlID)
             }
         }
-        // The buttons' click zones.
-        for control in shown where control.clickZone != nil && control.canHaveClickZone {
+        // The click zones, a hotkey's with its key in it.
+        for control in zoned {
             painter.drawClickZone(control, selected: control.id == selected, hovered: control.id == hovered?.controlID)
         }
         // Eyes first: buttons are drawn over their area.
@@ -1914,11 +1918,13 @@ final class KeymapEditorView: NSView {
             painter.draw(control, selected: control.id == selected || lit.contains(control.id),
                          activeSlot: control.id == selected ? dpadSlot : nil)
         }
-        // What each does besides its touch, beside it.
+        // What each does besides its touch, beside it (a hotkey's, under its zone).
         for control in shown { painter.drawActionBadges(control) }
+        for control in zoned where !control.isOnGame { painter.drawActionBadges(control) }
         // In a layout with modes, what acts in all of them is marked so.
         if !profile.modes.isEmpty {
             for control in shown where control.modes == nil { painter.drawEveryModeBadge(control) }
+            for control in zoned where !control.isOnGame && control.modes == nil { painter.drawEveryModeBadge(control) }
         }
         if showsHero {
             let active = { if case .hero? = drag { true } else if case .hero? = hovered { true } else { false } }()

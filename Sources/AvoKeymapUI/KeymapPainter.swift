@@ -126,6 +126,9 @@ struct KeymapPainter {
             return CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)
         case .clickArea(let area, _):
             return rect(of: area)
+        case .hotkey where control.clickZone != nil:
+            // Its click zone is its only place on the game.
+            return control.clickZone.map { rect(of: $0.area) } ?? .zero
         case let .scrollBar(from, to, _, _):
             // Around the track, as wide as a button.
             let a = point(from), b = point(to), r = bubbleRadius(control)
@@ -404,7 +407,8 @@ struct KeymapPainter {
 
     /// A control's click zone (editor), under the controls: a faint fill in
     /// a dotted outline of its shape, with a click mark in a corner, named
-    /// while it is selected or under the pointer.
+    /// while it is selected or under the pointer. A hotkey, which has no
+    /// button, has its key in the middle.
     func drawClickZone(_ control: Control, selected: Bool, hovered: Bool) {
         guard let zone = control.clickZone else { return }
         let color = selected ? Self.selection : Self.ink
@@ -416,6 +420,18 @@ struct KeymapPainter {
         line(outline, color: fade(color, selected ? 1 : hovered ? 0.8 : 0.5), width: selected ? 2 : 1.5)
         let mark = CGPoint(x: r.maxX - 9, y: r.minY + 9)
         symbol("cursorarrow.click", at: mark, size: 10, color: fade(color, selected ? 1 : 0.7))
+        if !control.isOnGame {
+            let c = CGPoint(x: r.midX, y: r.midY), text = triggerText(control)
+            let size = min(max(min(r.width, r.height) * 0.2, 9), 14)
+            let mark = CGPoint(x: c.x, y: c.y + size * 0.55), key = CGPoint(x: c.x, y: c.y - size * 0.55)
+            let content = symbolRect("keyboard", at: mark, size: size * 0.9).union(labelRect(text, at: key, size: size))
+            let plate = content.insetBy(dx: -6, dy: -3)
+            fade(color, 0.9 * opacity).setFill()
+            NSBezierPath(roundedRect: plate, xRadius: 6, yRadius: 6).fill()
+            keyPlate(around: content, color: color)
+            symbol("keyboard", at: mark, size: size * 0.9, color: .black)
+            label(text, at: key, color: .black, size: size)
+        }
         guard selected || hovered else { return }
         tag(String(localized: "Click area", bundle: .avoSharedKit), inside: r, color: color)
     }
@@ -428,6 +444,11 @@ struct KeymapPainter {
         switch control.kind {
         case .clickArea(let area, _):
             let r = rect(of: area)
+            start = CGPoint(x: r.minX + 9, y: r.minY - 11)
+        case .hotkey:
+            // Under its click zone, like a click area's; none without one.
+            guard let zone = control.clickZone else { return }
+            let r = rect(of: zone.area)
             start = CGPoint(x: r.minX + 9, y: r.minY - 11)
         case let .mobaMove(center, radius):
             let c = point(center), r = dpadRadius(radius)
