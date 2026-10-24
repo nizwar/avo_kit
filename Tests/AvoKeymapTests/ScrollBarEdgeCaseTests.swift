@@ -164,29 +164,34 @@ private func eye(area: NormalizedRect = NormalizedRect(0.1, 0.1, 0.6, 0.7)) -> C
 
     // MARK: The eye's area
 
-    /// Over the eye's swipe area a scroll bar works only while the mouse is
-    /// free: while it aims, a wheel's drag there would turn the camera,
-    /// which a swipe may not do either. The wheel then goes to the game.
-    @Test func aScrollBarOverTheAimAreaWorksOnlyWhileTheMouseIsFree() {
+    /// Over the eye's swipe area, in a mode the eye works in, a scroll bar is
+    /// refused as a swipe there is: its drag would turn the camera, whether
+    /// the mouse aims or a key fires with it free (no recoil compensation).
+    /// A map's slider there gets a mode without the eye.
+    @Test func aScrollBarOverTheAimAreaIsRefusedWhereTheEyeWorks() {
         let pull = Control(id: "pull", kind: .scrollBar(from: NormalizedPoint(0.3, 0.3), to: NormalizedPoint(0.3, 0.6), rest: 0, step: 0.05))
-        let profile = KeymapProfile(package: "x", name: "x", controls: [eye(), pull, zoom()], fps: FPSSettings(aimControl: "eye"))
-        #expect(profile.validate().isEmpty)
-        #expect(profile.scrollBarsOverTheAimArea == ["pull"])
-        var e = engine(profile)
-        // The mouse free: both bars.
-        _ = e.handle(.scroll(dy: 1), at: 0)
-        #expect(e.activeTouchCount == 2)
-        _ = e.tick(at: 1)
-        // Aiming: the eye's finger and the zoom slider's, not the one over the camera.
+        let refused = KeymapProfile(package: "x", name: "x", controls: [eye(), pull, zoom()], fps: FPSSettings(aimControl: "eye"))
+        #expect(refused.scrollBarsOverTheAimArea == ["pull"])
+        #expect(refused.validate() == ["pull: a scroll bar may not drag over the aim area where the eye works (no recoil compensation)"])
+        // Only in the map's mode, where the eye does not work: allowed, and it
+        // works there with the mouse locked or not.
+        var eyeOnFoot = eye()
+        eyeOnFoot.modes = ["foot"]
+        var mapOnly = pull
+        mapOnly.modes = ["map"]
+        let toMap = Control(id: "toMap", kind: .hotkey, triggers: [.key(.m)], modes: ["foot"], actions: [.switchMode("map")])
+        let modes = [KeymapMode(id: "foot", name: "Foot"), KeymapMode(id: "map", name: "Map")]
+        let allowed = KeymapProfile(package: "x", name: "x", controls: [eyeOnFoot, mapOnly, toMap], fps: FPSSettings(aimControl: "eye"), modes: modes)
+        #expect(allowed.scrollBarsOverTheAimArea.isEmpty)
+        #expect(allowed.validate().isEmpty, "\(allowed.validate())")
+        var e = engine(allowed)
         _ = e.setPointerLocked(true)
-        let aiming = summary(e.handle(.scroll(dy: 1), at: 2).events)
-        #expect(e.activeTouchCount == 2)
-        #expect(!aiming.contains { $0.contains("@720,") }, "\(aiming)")
-        // With only the bar over the camera, the wheel is the game's while aiming.
-        var alone = engine(KeymapProfile(package: "x", name: "x", controls: [eye(), pull], fps: FPSSettings(aimControl: "eye")))
-        _ = alone.setPointerLocked(true)
-        #expect(!alone.takes(.scrollUp))
-        #expect(!alone.handle(.scroll(dy: 1), at: 0).consumed)
+        #expect(!e.takes(.scrollUp), "on foot: no bar")
+        #expect(e.handle(.keyDown(.m), at: 0).mode == "map")
+        #expect(e.handle(.scroll(dy: 1), at: 0.1).consumed)
+        // An eye of every mode works in the map's too: refused.
+        let everyMode = KeymapProfile(package: "x", name: "x", controls: [eye(), mapOnly], fps: FPSSettings(aimControl: "eye"), modes: modes)
+        #expect(everyMode.validate().contains { $0.hasPrefix("pull:") })
     }
 
     @Test func aTrackCrossingAnAreaTouchesIt() {

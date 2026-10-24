@@ -739,14 +739,15 @@ extension Control {
 }
 
 extension KeymapProfile {
-    /// The scroll bars whose track crosses the eye's swipe area (FPS mode).
-    /// They work only while the mouse is free (KeymapEngine): while it aims,
-    /// the wheel's drag there would turn the camera, which a swipe may not
-    /// do either (no recoil compensation).
+    /// The scroll bars whose track crosses the eye's swipe area (FPS mode)
+    /// in a mode the eye acts in: the wheel's drag there would turn the
+    /// camera, which a swipe may not do either (no recoil compensation), so
+    /// validation refuses them. A map's slider there belongs in a mode
+    /// without the eye.
     public var scrollBarsOverTheAimArea: Set<String> {
-        guard let id = fps?.aimControl, let area = controls.first(where: { $0.id == id })?.fingerArea else { return [] }
+        guard let id = fps?.aimControl, let eye = controls.first(where: { $0.id == id }), let area = eye.fingerArea else { return [] }
         return Set(controls.compactMap { control in
-            guard case let .scrollBar(from, to, _, _) = control.kind, area.touches(from: from, to: to) else { return nil }
+            guard case let .scrollBar(from, to, _, _) = control.kind, area.touches(from: from, to: to), sharesMode(control, eye) else { return nil }
             return control.id
         })
     }
@@ -1101,6 +1102,8 @@ extension KeymapProfile {
                     problems.append(String(localized: "\(control.id): macros are not allowed in FPS mode (no recoil or fire macros)", bundle: .avoSharedKit))
                 case let .swipe(from, to, _) where area.contains(from) || area.contains(to):
                     problems.append(String(localized: "\(control.id): swipes may not touch the aim area (no recoil compensation)", bundle: .avoSharedKit))
+                case .scrollBar where scrollBarsOverTheAimArea.contains(control.id):
+                    problems.append(String(localized: "\(control.id): a scroll bar may not drag over the aim area where the eye works (no recoil compensation)", bundle: .avoSharedKit))
                 default:
                     break
                 }

@@ -217,21 +217,31 @@ public final class KeymapController {
     static let trackpadNotch = 40.0
     /// The trackpad's scrolling not a notch yet, in points (its sign the way it goes).
     private var trackpadRest = 0.0
-    /// Whether the mapping takes the trackpad gesture going on, as decided
-    /// when it began; nil between gestures.
+    /// Whether the mapping takes the trackpad gesture going on, its momentum
+    /// included, as decided when it began; nil between gestures.
     private var trackpadTaken: Bool?
 
     func scroll(deltaY: Double, precise: Bool, phase: NSEvent.Phase = [], momentum: NSEvent.Phase = []) -> Bool {
-        guard mapping, let engine else { return false }
+        let begins = phase.contains(.began) || phase.contains(.mayBegin)
+        guard mapping, let engine else {
+            // Begun while the mapping is off, the gesture is the game's to its
+            // end, even if Game Mode comes on midway (its finger needs its end).
+            if precise, begins { trackpadTaken = false }
+            return false
+        }
         guard precise else { return deltaY != 0 && handle(.scroll(dy: deltaY)) }
-        let phased = !phase.isEmpty || !momentum.isEmpty
-        if trackpadTaken == nil || !phased || phase.contains(.began) || phase.contains(.mayBegin) {
+        if phase.isEmpty && momentum.isEmpty {
+            // A source without phases (a smooth-scrolling mouse utility): each
+            // event on its own, its points still adding up to notches.
+            trackpadTaken = engine.takes(.scrollUp) || engine.takes(.scrollDown)
+        } else if trackpadTaken == nil || begins {
             trackpadTaken = engine.takes(.scrollUp) || engine.takes(.scrollDown)
             trackpadRest = 0
         }
         let taken = trackpadTaken == true
+        // The decision lasts through the fling after the fingers lift.
         defer {
-            if [.ended, .cancelled].contains(where: { phase.contains($0) || momentum.contains($0) }) { trackpadTaken = nil }
+            if [.ended, .cancelled].contains(where: { momentum.contains($0) }) { trackpadTaken = nil }
         }
         guard taken, momentum.isEmpty, deltaY != 0 else { return taken }
         // Turned the other way: from nothing again.

@@ -195,35 +195,76 @@ struct KeymapControllerTests {
         #expect(host.touches.first == "7 down 0@2160,475")
     }
 
+    /// Each notch flips the layout between two modes: their count is the notches'.
+    private static let flipper = KeymapProfile(package: "com.example.game", name: "Wheel", controls: [
+        Control(id: "toB", kind: .hotkey, triggers: [.scrollUp, .scrollDown], modes: ["a"], actions: [.switchMode("b")]),
+        Control(id: "toA", kind: .hotkey, triggers: [.scrollUp, .scrollDown], modes: ["b"], actions: [.switchMode("a")]),
+    ], modes: [KeymapMode(id: "a", name: "A"), KeymapMode(id: "b", name: "B")])
+
     @Test("Trackpad scrolling is a notch every 40 points, and its momentum is none")
     func trackpadScrollingAddsUpToNotches() {
-        let weapon = KeymapProfile(package: "com.example.game", name: "Wheel",
-                                   controls: [Control(id: "next", kind: .tap(NormalizedPoint(0.5, 0.9)), triggers: [.scrollUp, .scrollDown])])
-        let host = Host(gameMode: true, bundled: weapon)
+        let host = Host(gameMode: true, bundled: Self.flipper)
         let keymap = host.controller()
         defer { keymap.stop() }
-        func taps() -> Int { host.touches.filter { $0.contains(" down ") || $0.contains(" pointerDown ") }.count }
+        var notches = 0
+        keymap.onMode = { _ in notches += 1 }
         #expect(keymap.scroll(deltaY: 15, precise: true, phase: .began))
-        #expect(taps() == 0)
+        #expect(notches == 0)
         #expect(keymap.scroll(deltaY: 30, precise: true, phase: .changed))
-        #expect(taps() == 1)
+        #expect(notches == 1)
         // Fast: three notches in one event, the rest carried on.
         #expect(keymap.scroll(deltaY: 125, precise: true, phase: .changed))
-        #expect(taps() == 4)
+        #expect(notches == 4)
         // Turned back: from nothing again, the other way.
         #expect(keymap.scroll(deltaY: -39, precise: true, phase: .changed))
-        #expect(taps() == 4)
+        #expect(notches == 4)
         #expect(keymap.scroll(deltaY: -1, precise: true, phase: .changed))
-        #expect(taps() == 5)
+        #expect(notches == 5)
         #expect(keymap.scroll(deltaY: 0, precise: true, phase: .ended))
         // The fling after the fingers lift: kept from the game, no notch.
         #expect(keymap.scroll(deltaY: 400, precise: true, momentum: .began))
         #expect(keymap.scroll(deltaY: 300, precise: true, momentum: .changed))
         #expect(keymap.scroll(deltaY: 0, precise: true, momentum: .ended))
-        #expect(taps() == 5)
+        #expect(notches == 5)
         // A mouse wheel's event is one notch, however far it says.
         #expect(keymap.scroll(deltaY: 3, precise: false))
-        #expect(taps() == 6)
+        #expect(notches == 6)
+        // A source without phases (a smooth-scrolling mouse utility): its points add up all the same.
+        for _ in 0..<12 { #expect(keymap.scroll(deltaY: 10, precise: true)) }
+        #expect(notches == 9)
+    }
+
+    @Test("A fling after the fingers lift stays the mapping's, even when a notch changed what the wheel does")
+    func theFlingFollowsItsGesture() {
+        // Wheel↓ leaves for a mode where the wheel does nothing.
+        let leave = KeymapProfile(package: "com.example.game", name: "Leave", controls: [
+            Control(id: "out", kind: .hotkey, triggers: [.scrollDown], modes: ["map"], actions: [.switchMode("foot")]),
+        ], modes: [KeymapMode(id: "map", name: "Map"), KeymapMode(id: "foot", name: "Foot")])
+        let host = Host(gameMode: true, bundled: leave)
+        let keymap = host.controller()
+        defer { keymap.stop() }
+        #expect(keymap.scroll(deltaY: -10, precise: true, phase: .began))
+        #expect(keymap.scroll(deltaY: -40, precise: true, phase: .changed))
+        #expect(keymap.mode == "foot")
+        #expect(keymap.scroll(deltaY: 0, precise: true, phase: .ended))
+        #expect(keymap.scroll(deltaY: -300, precise: true, momentum: .began), "the fling is the mapping's gesture's")
+        #expect(keymap.scroll(deltaY: 0, precise: true, momentum: .ended))
+        // The next gesture is decided anew: the wheel is the game's on foot.
+        #expect(!keymap.scroll(deltaY: -10, precise: true, phase: .began))
+    }
+
+    @Test("A trackpad gesture begun with Game Mode off stays the game's when Game Mode comes on midway")
+    func aGestureBegunWithGameModeOffStaysTheGames() {
+        let host = Host(gameMode: false, bundled: Self.flipper)
+        let keymap = host.controller()
+        defer { keymap.stop() }
+        #expect(!keymap.scroll(deltaY: 10, precise: true, phase: .began))
+        keymap.setGameMode(true)
+        #expect(!keymap.scroll(deltaY: 80, precise: true, phase: .changed))
+        #expect(!keymap.scroll(deltaY: 0, precise: true, phase: .ended))
+        #expect(!keymap.scroll(deltaY: 200, precise: true, momentum: .began))
+        #expect(!keymap.scroll(deltaY: 0, precise: true, momentum: .ended))
+        #expect(keymap.scroll(deltaY: 10, precise: true, phase: .began), "the next one is the mapping's")
     }
 
     @Test("A trackpad gesture is the game's as a whole when the wheel was the game's as it began")

@@ -113,6 +113,16 @@
         }
       }
     },
+    "%@: a scroll bar may not drag over the aim area where the eye works (no recoil compensation)" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: scroll bar tidak boleh menyeret di area bidik saat mata bekerja (tanpa kompensasi recoil)"
+          }
+        }
+      }
+    },
     "%@: a step must be 1 to 50%% of the track" : {
       "localizations" : {
         "id" : {

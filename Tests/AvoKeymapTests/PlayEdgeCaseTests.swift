@@ -35,8 +35,10 @@ private func walk(layer: ControlLayer? = nil) -> Control {
 @Suite struct PlayEdgeCaseTests {
     // MARK: Keys pressed again fast
 
-    /// Pressed, let go and pressed again within its interval: one chain, at its pace.
-    @Test func aRepeatTapKeepsItsPaceThroughAQuickRepress() {
+    /// Pressed, let go and pressed again within its interval: the first
+    /// chain ended with its key, the second press taps at once and keeps its
+    /// own pace (never two chains).
+    @Test func aRepeatTapPressedAgainQuicklyTapsAtOnceAtItsPace() {
         let profile = KeymapProfile(package: "x", name: "x", controls: [
             Control(id: "r", kind: .repeatTap(NormalizedPoint(0.5, 0.5), intervalMilliseconds: 150), triggers: [.key(.q)]),
         ])
@@ -45,12 +47,62 @@ private func walk(layer: ControlLayer? = nil) -> Control {
         taps += downs(e.handle(.keyUp(.q), at: 0.05).events)
         taps += downs(e.handle(.keyDown(.q), at: 0.10).events)
         var t = 0.10
-        while t < 1.0 {
+        while t < 0.95 {
             t += 0.004
             taps += downs(e.tick(at: t))
         }
-        // At 0, 0.15, 0.30 … 0.90.
+        // At 0, then 0.10, 0.25 … 0.85.
         #expect(taps == 7, "\(taps) taps")
+    }
+
+    /// Two short presses of a slow repeat tap, the second before the first's
+    /// next slot: each press taps.
+    @Test func eachShortPressOfARepeatTapTaps() {
+        let profile = KeymapProfile(package: "x", name: "x", controls: [
+            Control(id: "r", kind: .repeatTap(NormalizedPoint(0.5, 0.5), intervalMilliseconds: 500), triggers: [.key(.q)],
+                    clickZone: ClickZone(area: NormalizedRect(0.45, 0.4, 0.55, 0.6), shape: .rectangle)),
+        ])
+        var e = engine(profile)
+        var taps = downs(e.handle(.keyDown(.q), at: 0).events)
+        _ = e.handle(.keyUp(.q), at: 0.1)
+        taps += downs(e.handle(.keyDown(.q), at: 0.3).events)
+        _ = e.handle(.keyUp(.q), at: 0.4)
+        // Two quick clicks on its zone as well.
+        taps += downs(e.handle(.fingerDown(x: 1200, y: 540), at: 1).events)
+        _ = e.handle(.fingerUp(x: 1200, y: 540), at: 1.05)
+        taps += downs(e.handle(.fingerDown(x: 1200, y: 540), at: 1.2).events)
+        _ = e.handle(.fingerUp(x: 1200, y: 540), at: 1.25)
+        taps += downs(e.tick(at: 3))
+        #expect(taps == 4)
+    }
+
+    /// Wheel notches faster than a tap lasts: one finger at a time on the
+    /// button, each notch a tap of its own, and no more than half a second
+    /// of them waiting.
+    @Test func fastNotchesTapOneAfterAnother() {
+        let profile = KeymapProfile(package: "x", name: "x", controls: [
+            Control(id: "next", kind: .tap(NormalizedPoint(0.5, 0.9)), triggers: [.scrollUp]),
+        ])
+        var e = engine(profile)
+        var events = e.handle(.scroll(dy: 1), at: 0).events
+        events += e.handle(.scroll(dy: 1), at: 0.005).events
+        events += e.handle(.scroll(dy: 1), at: 0.01).events
+        #expect(e.activeTouchCount == 1)
+        var most = 1
+        var t = 0.01
+        while t < 0.5 {
+            t += 0.004
+            events += e.tick(at: t)
+            most = max(most, e.activeTouchCount)
+        }
+        #expect(downs(events) == 3)
+        #expect(most == 1, "never two fingers on it")
+        // A flood: the taps that would wait past half a second are left out.
+        var flood = engine(profile)
+        var flooded: [TouchEvent] = []
+        for _ in 0..<40 { flooded += flood.handle(.scroll(dy: 1), at: 1).events }
+        flooded += flood.tick(at: 5)
+        #expect(downs(flooded) == 9, "\(downs(flooded)) taps from 40 notches in one go")
     }
 
     /// A tap let go before its shortest time and pressed again: the same finger stays down.
@@ -147,6 +199,40 @@ private func walk(layer: ControlLayer? = nil) -> Control {
         #expect(locked.contains { $0.hasPrefix("pointerDown") && $0.contains("@720,") }, "\(locked)")
     }
 
+    /// An anchor held by a mouse button while the mouse is locked and freed
+    /// follows the cursor again from where it is, without a jump.
+    @Test func anAnchorOnAMouseButtonDoesNotJumpAfterALock() {
+        let wheel = Control(id: "emotes", kind: .anchor(NormalizedPoint(0.5, 0.5)), triggers: [.mouse(.right)])
+        var e = engine(KeymapProfile(package: "x", name: "x", controls: [eye(), wheel], fps: FPSSettings(aimControl: "eye")))
+        _ = e.handle(.mouseDown(.right), at: 0)
+        _ = e.handle(.cursor(x: 500, y: 500), at: 0.01)
+        _ = e.setPointerLocked(true)
+        _ = e.setPointerLocked(false)
+        // The host parked the hidden cursor at the view's middle meanwhile.
+        _ = e.handle(.cursor(x: 1200, y: 540), at: 0.2)
+        let moved = summary(e.handle(.cursor(x: 1210, y: 540), at: 0.21).events + e.tick(at: 0.22))
+        #expect(moved.count <= 1)
+        #expect(moved.allSatisfy { !$0.hasPrefix("move") || $0.contains("@1210,540") || $0.contains("1@1210,540") }, "\(moved)")
+    }
+
+    /// Focus lost or a resize with Aim Down Sights toggled on: the game still
+    /// aims down sights, and so does the eye's sensitivity.
+    @Test func aToggledAimDownSightsStaysOnThroughAResize() {
+        let ads = Control(id: "ads", kind: .ads(NormalizedPoint(0.9, 0.5), toggle: true), triggers: [.key(.q)])
+        var e = engine(KeymapProfile(package: "x", name: "x", controls: [eye(), ads], fps: FPSSettings(aimControl: "eye")))
+        _ = e.setPointerLocked(true)
+        _ = e.handle(.keyDown(.q), at: 0)
+        _ = e.resize(width: 1920, height: 1080)
+        #expect(e.adsActive)
+        // Held instead: the finger lifts, and the game stops aiming down sights.
+        let hold = Control(id: "ads", kind: .ads(NormalizedPoint(0.9, 0.5), toggle: false), triggers: [.key(.q)])
+        var held = engine(KeymapProfile(package: "x", name: "x", controls: [eye(), hold], fps: FPSSettings(aimControl: "eye")))
+        _ = held.setPointerLocked(true)
+        _ = held.handle(.keyDown(.q), at: 0)
+        _ = held.reset()
+        #expect(!held.adsActive)
+    }
+
     /// Aim Down Sights toggled on stays on when the mouse is freed (the game
     /// still aims down sights), so the next press turns it off.
     @Test func aToggledAimDownSightsStaysOnWhenTheMouseIsFreed() {
@@ -230,6 +316,33 @@ private func walk(layer: ControlLayer? = nil) -> Control {
         #expect(profile.validate().isEmpty, "\(profile.validate())")
         #expect(profile.controls[0].triggers == [.key(.space), .gamepad(.a)], "the preset's own")
         #expect(profile.controls[1].triggers == [.gamepad(.y)], "kept")
+    }
+
+    /// A preset, which holds no run or reset keys, leaves them as they are.
+    @Test func applyingAPresetKeepsRunAndResetKeys() {
+        var profile = KeymapProfile(package: "x", name: "x", controls: [
+            Control(id: "zoom", kind: .scrollBar(from: NormalizedPoint(0.9, 0.8), to: NormalizedPoint(0.9, 0.2), rest: 0.5, step: 0.1),
+                    reset: .gamepad(.y)),
+            Control(id: "move", kind: .dpad(center: NormalizedPoint(0.15, 0.7), radius: 0.12, up: .key(.w), down: .key(.s),
+                                            left: .key(.a), right: .key(.d), stick: .left), run: JoystickRun(trigger: .gamepad(.leftThumbstick))),
+        ])
+        let preset = profile.gamepadPreset(named: "mine")
+        profile.apply(preset)
+        #expect(profile.controls[0].reset == .gamepad(.y))
+        #expect(profile.controls[1].run?.trigger == .gamepad(.leftThumbstick))
+        #expect(profile.validate().isEmpty, "\(profile.validate())")
+    }
+
+    /// A preset that gives the d-pad to a joystick: a tap that was on one of
+    /// its buttons does not get it back beside the joystick.
+    @Test func aPresetsDPadJoystickKeepsTheDPadToItself() {
+        var profile = KeymapProfile(package: "x", name: "x", controls: [
+            walk(),
+            Control(id: "map", kind: .tap(NormalizedPoint(0.9, 0.1)), triggers: [.gamepad(.dpadUp)]),
+        ])
+        profile.apply(GamepadPreset(name: "p", bindings: ["move": GamepadBinding(dpad: true)]))
+        #expect(profile.controls[0].dpadButtons)
+        #expect(profile.controls(boundTo: .button(.dpadUp)).map(\.id) == ["move"])
     }
 
     /// "Replace Layout" with a template leaves the old layout's modes behind too.

@@ -658,14 +658,24 @@ extension KeymapProfile {
     /// directions with it). Bindings that no longer fit (a control that is
     /// gone or changed kind, a button a direction holds) are left out; their
     /// number is returned. A control that only the controller pressed and
-    /// that the preset leaves with no button keeps the ones it had: with
-    /// nothing to press it, the layout could not be saved.
+    /// that the preset leaves with no button keeps the ones it had (with
+    /// nothing to press it, the layout could not be saved), but not the
+    /// d-pad's buttons when the preset gave the d-pad to a joystick beside
+    /// it. A joystick's run key and a scroll bar's reset key, which presets
+    /// do not hold, stay as they are.
     @discardableResult
     public mutating func apply(_ preset: GamepadPreset) -> Int {
-        let before = Dictionary(controls.map { ($0.id, $0.triggers) }, uniquingKeysWith: { first, _ in first })
+        let before = Dictionary(controls.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         defer {
-            for i in controls.indices where controls[i].triggers.isEmpty {
-                if let triggers = before[controls[i].id], !triggers.isEmpty, triggers.allSatisfy(\.isGamepad) { controls[i].triggers = triggers }
+            for i in controls.indices {
+                guard let old = before[controls[i].id] else { continue }
+                controls[i].run = controls[i].run ?? old.run
+                controls[i].reset = controls[i].reset ?? old.reset
+                guard controls[i].triggers.isEmpty, !old.triggers.isEmpty, old.triggers.allSatisfy(\.isGamepad) else { continue }
+                let dpadTaken = controls.contains { $0.dpadButtons && $0.id != controls[i].id && sharesMode($0, controls[i]) }
+                controls[i].triggers = old.triggers.filter { trigger in
+                    !(dpadTaken && GamepadElement.dpadButtons.contains { trigger == .gamepad($0) })
+                }
             }
         }
         for element in [GamepadElement.dpad] + GamepadStick.allCases.map(GamepadElement.stick)
