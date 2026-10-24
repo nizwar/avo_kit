@@ -171,6 +171,83 @@ struct KeymapControllerTests {
         #expect(host.touches.count == 2)
     }
 
+    @Test("Saving the layout keeps the mode the game is in, and the scroll bars' thumbs where they are")
+    func savingKeepsTheModeAndTheThumbs() throws {
+        let zoom = Control(id: "zoom", kind: .scrollBar(from: NormalizedPoint(0.9, 0.8), to: NormalizedPoint(0.9, 0.2), rest: 0.5, step: 0.1))
+        let modes = KeymapProfile(package: "com.example.game", name: "Modes", controls: [
+            zoom,
+            Control(id: "drive", kind: .hotkey, triggers: [.key(.v)], modes: ["foot"], actions: [.switchMode("car")]),
+            Control(id: "walk", kind: .hotkey, triggers: [.key(.v)], modes: ["car"], actions: [.switchMode("foot")]),
+        ], modes: [KeymapMode(id: "foot", name: "On foot"), KeymapMode(id: "car", name: "Car")])
+        let host = Host(gameMode: true, bundled: modes)
+        let keymap = host.controller()
+        defer { keymap.stop() }
+        #expect(keymap.key(.v, down: true, isRepeat: false))
+        _ = keymap.key(.v, down: false, isRepeat: false)
+        #expect(keymap.mode == "car")
+        // A notch up, its finger let go when the editor opens (focus lost).
+        #expect(keymap.scroll(deltaY: 1, precise: false))
+        keymap.focusLost()
+        try keymap.save(modes)
+        #expect(keymap.mode == "car")
+        host.sent.removeAll()
+        #expect(keymap.scroll(deltaY: 1, precise: false))
+        #expect(host.touches.first == "7 down 0@2160,475")
+    }
+
+    @Test("Trackpad scrolling is a notch every 40 points, and its momentum is none")
+    func trackpadScrollingAddsUpToNotches() {
+        let weapon = KeymapProfile(package: "com.example.game", name: "Wheel",
+                                   controls: [Control(id: "next", kind: .tap(NormalizedPoint(0.5, 0.9)), triggers: [.scrollUp, .scrollDown])])
+        let host = Host(gameMode: true, bundled: weapon)
+        let keymap = host.controller()
+        defer { keymap.stop() }
+        func taps() -> Int { host.touches.filter { $0.contains(" down ") || $0.contains(" pointerDown ") }.count }
+        #expect(keymap.scroll(deltaY: 15, precise: true, phase: .began))
+        #expect(taps() == 0)
+        #expect(keymap.scroll(deltaY: 30, precise: true, phase: .changed))
+        #expect(taps() == 1)
+        // Fast: three notches in one event, the rest carried on.
+        #expect(keymap.scroll(deltaY: 125, precise: true, phase: .changed))
+        #expect(taps() == 4)
+        // Turned back: from nothing again, the other way.
+        #expect(keymap.scroll(deltaY: -39, precise: true, phase: .changed))
+        #expect(taps() == 4)
+        #expect(keymap.scroll(deltaY: -1, precise: true, phase: .changed))
+        #expect(taps() == 5)
+        #expect(keymap.scroll(deltaY: 0, precise: true, phase: .ended))
+        // The fling after the fingers lift: kept from the game, no notch.
+        #expect(keymap.scroll(deltaY: 400, precise: true, momentum: .began))
+        #expect(keymap.scroll(deltaY: 300, precise: true, momentum: .changed))
+        #expect(keymap.scroll(deltaY: 0, precise: true, momentum: .ended))
+        #expect(taps() == 5)
+        // A mouse wheel's event is one notch, however far it says.
+        #expect(keymap.scroll(deltaY: 3, precise: false))
+        #expect(taps() == 6)
+    }
+
+    @Test("A trackpad gesture is the game's as a whole when the wheel was the game's as it began")
+    func aTrackpadGestureBelongsToOneSide() {
+        let mapOnly = KeymapProfile(package: "com.example.game", name: "Map", controls: [
+            Control(id: "zoom", kind: .scrollBar(from: NormalizedPoint(0.9, 0.8), to: NormalizedPoint(0.9, 0.2), rest: 0.5, step: 0.1),
+                    modes: ["map"]),
+            Control(id: "map", kind: .hotkey, triggers: [.key(.m)], modes: ["foot"], actions: [.switchMode("map")]),
+        ], modes: [KeymapMode(id: "foot", name: "On foot"), KeymapMode(id: "map", name: "Map")])
+        let host = Host(gameMode: true, bundled: mapOnly)
+        let keymap = host.controller()
+        defer { keymap.stop() }
+        #expect(!keymap.scroll(deltaY: 10, precise: true, phase: .began))
+        // The map opens mid-gesture: the rest of it is still the game's.
+        #expect(keymap.key(.m, down: true, isRepeat: false))
+        #expect(!keymap.scroll(deltaY: 80, precise: true, phase: .changed))
+        #expect(!keymap.scroll(deltaY: 0, precise: true, phase: .ended))
+        #expect(host.touches.isEmpty)
+        // The next gesture is the mapping's.
+        #expect(keymap.scroll(deltaY: 10, precise: true, phase: .began))
+        #expect(keymap.scroll(deltaY: 40, precise: true, phase: .changed))
+        #expect(host.touches.first == "7 down 0@2160,540")
+    }
+
     @Test("Without a profile, Game Mode says how to set one up and maps nothing")
     func noProfileMapsNothing() {
         let host = Host()

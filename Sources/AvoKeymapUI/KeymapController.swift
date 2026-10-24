@@ -135,7 +135,8 @@ public final class KeymapController {
             return
         }
         let size = view.displaySize
-        engine = KeymapEngine(profile: profile, displayID: displayID, width: size.width, height: size.height)
+        // The game is where it was: the layout stays in its mode, its scroll bars' thumbs where they are.
+        engine = KeymapEngine(profile: profile, displayID: displayID, width: size.width, height: size.height, continuing: engine)
         updateTicking()
         onProfile?(profile)
         onMode?(engine?.mode)
@@ -198,9 +199,45 @@ public final class KeymapController {
         return handle(.pointerMoved(dx: dx, dy: dy))
     }
 
-    public func scroll(_ deltaY: Double) -> Bool {
-        guard mapping, deltaY != 0 else { return false }
-        return handle(.scroll(dy: deltaY))
+    /// A scroll over the game; true when the mapping took it, and the game
+    /// gets none of it. A mouse wheel's event is one notch. A trackpad or a
+    /// Magic Mouse scrolls by points: they add up to a notch every
+    /// `trackpadNotch`, and its momentum after the fingers lift counts for
+    /// nothing. Such a gesture is the mapping's or the game's as a whole.
+    public func scroll(_ event: NSEvent) -> Bool {
+        scroll(deltaY: event.scrollingDeltaY, precise: event.hasPreciseScrollingDeltas, phase: event.phase, momentum: event.momentumPhase)
+    }
+
+    /// The points of trackpad scrolling that make one wheel notch.
+    static let trackpadNotch = 40.0
+    /// The trackpad's scrolling not a notch yet, in points (its sign the way it goes).
+    private var trackpadRest = 0.0
+    /// Whether the mapping takes the trackpad gesture going on, as decided
+    /// when it began; nil between gestures.
+    private var trackpadTaken: Bool?
+
+    func scroll(deltaY: Double, precise: Bool, phase: NSEvent.Phase = [], momentum: NSEvent.Phase = []) -> Bool {
+        guard mapping, let engine else { return false }
+        guard precise else { return deltaY != 0 && handle(.scroll(dy: deltaY)) }
+        let phased = !phase.isEmpty || !momentum.isEmpty
+        if trackpadTaken == nil || !phased || phase.contains(.began) || phase.contains(.mayBegin) {
+            trackpadTaken = engine.takes(.scrollUp) || engine.takes(.scrollDown)
+            trackpadRest = 0
+        }
+        let taken = trackpadTaken == true
+        defer {
+            if [.ended, .cancelled].contains(where: { phase.contains($0) || momentum.contains($0) }) { trackpadTaken = nil }
+        }
+        guard taken, momentum.isEmpty, deltaY != 0 else { return taken }
+        // Turned the other way: from nothing again.
+        if trackpadRest != 0, (trackpadRest > 0) != (deltaY > 0) { trackpadRest = 0 }
+        trackpadRest += deltaY
+        while abs(trackpadRest) >= Self.trackpadNotch {
+            let notch: Double = trackpadRest > 0 ? 1 : -1
+            trackpadRest -= notch * Self.trackpadNotch
+            _ = handle(.scroll(dy: notch))
+        }
+        return true
     }
 
     public func resize(width: Double, height: Double) {
