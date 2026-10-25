@@ -101,8 +101,8 @@ struct KeymapEditorFocusTests {
 @MainActor
 @Suite("Closing the window while the editor is open")
 struct KeymapEditorClosingTests {
-    @Test("Without changes the window may close at once; while a question is up it waits")
-    func mayCloseWithoutChanges() {
+    @Test("Without changes the window may close at once; while a question is up it stays, and still gets its answer")
+    func mayCloseWithoutChanges() async {
         let editor = Editor(KeymapProfile(package: "x", name: "x", controls: [Control(id: "t", kind: .tap(NormalizedPoint(0.5, 0.5)), triggers: [.key(.t)])]))
         defer { editor.close() }
         var answered: Bool?
@@ -110,6 +110,10 @@ struct KeymapEditorClosingTests {
         #expect(answered == nil, "nothing asked")
         editor.model.sheetUp = true
         #expect(!editor.view.mayClose { answered = $0 })
+        // After it has said false, as a quit waiting for the answer needs.
+        #expect(answered == nil)
+        for _ in 0..<50 where answered == nil { await Task.yield() }
+        #expect(answered == false)
     }
 
     @Test("A notice while the editor is open shows in its panel")

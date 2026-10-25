@@ -2980,9 +2980,14 @@ final class KeymapEditorView: NSView {
     /// the editor closes and so may the window (true). With changes it asks
     /// (Save, Discard, Keep Editing) and says false for now; `answer` gets
     /// true once they are saved or discarded (the window may close then),
-    /// false to keep editing.
+    /// false to keep editing. With another question up it says false and
+    /// answers false right after: a false always brings one answer.
     func mayClose(answer: @escaping @MainActor (Bool) -> Void) -> Bool {
-        guard !isAsking else { return false }
+        guard !isAsking else {
+            // A quit that waits for its answer (terminateLater) gets one.
+            DispatchQueue.main.async { answer(false) }
+            return false
+        }
         guard profile != original, let window else {
             close()
             return true

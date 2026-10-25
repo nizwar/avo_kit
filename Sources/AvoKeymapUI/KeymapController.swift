@@ -566,7 +566,9 @@ public final class KeymapController {
     /// Discard, Keep Editing) and this says false; `answer` then gets true
     /// once the changes are saved or discarded (close the window there) or
     /// false to keep editing. Without the editor, or without changes, true:
-    /// the editor (if open) closes, and the window may close at once.
+    /// the editor (if open) closes, and the window may close at once. A
+    /// false always brings exactly one answer, later (false, when another of
+    /// the editor's questions is already up), so a quit can wait for it.
     public func mayClose(answer: @escaping @MainActor (Bool) -> Void) -> Bool {
         guard let overlay, overlay.isEditing else { return true }
         return overlay.mayClose(answer: answer)
