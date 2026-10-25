@@ -14,14 +14,17 @@
 //   AvoKeymapUI  the key mapping a window runs over its game view: the
 //                controller, the editor and its panels, the hints, GamepadHub
 //
-// Their text is in AvoKitResources (`Bundle.avoSharedKit`).
+// Their text is in AvoKitResources (`Bundle.avoSharedKit`). AvoInput,
+// AvoScreen and AvoHazeUI's colours, type and SwiftUI controls build for iOS
+// too (Avo Hub's iPhone and iPad app); the key mapping and the AppKit menus
+// and bars stay macOS.
 
 import PackageDescription
 
 let package = Package(
     name: "avo_kit",
     defaultLocalization: "en",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS(.v15), .iOS(.v18)],
     products: [
         .library(name: "AvoInput", targets: ["AvoInput"]),
         .library(name: "AvoScreen", targets: ["AvoScreen"]),

@@ -1,4 +1,6 @@
+#if canImport(AppKit)
 import AppKit
+#endif
 import AvoKitResources
 import CoreText
 import SwiftUI
@@ -21,11 +23,13 @@ public enum QuickHaze {
               blue: Double(value & 0xFF) / 255, opacity: alpha)
     }
 
+    #if os(macOS)
     /// The same colours for AppKit views.
     public nonisolated static func nsRGB(_ value: UInt32, _ alpha: CGFloat = 1) -> NSColor {
         NSColor(srgbRed: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255,
                 blue: CGFloat(value & 0xFF) / 255, alpha: alpha)
     }
+    #endif
 
     public static let base = rgb(0x0A1108)
     public static let card = rgb(0xF3F1E8, 0.045)
@@ -74,11 +78,13 @@ public enum QuickHaze {
     public static func hubot(_ size: CGFloat, _ weight: CGFloat = 700) -> Font { font(.hubot, size, weight) }
     public static func mona(_ size: CGFloat, _ weight: CGFloat = 400) -> Font { font(.mona, size, weight) }
 
+    #if os(macOS)
     /// Mona Sans for AppKit views.
     public static func monaFont(_ size: CGFloat, _ weight: CGFloat = 400) -> NSFont {
         ctFont(.mona, size, weight).map { $0 as NSFont }
             ?? .systemFont(ofSize: size, weight: weight >= 650 ? .bold : weight >= 550 ? .semibold : .regular)
     }
+    #endif
 
     private static func font(_ family: Family, _ size: CGFloat, _ weight: CGFloat) -> Font {
         let key = "\(family.rawValue)-\(size)-\(weight)"

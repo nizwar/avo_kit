@@ -1,3 +1,5 @@
+// AppKit windows and menus: macOS only.
+#if os(macOS)
 import AppKit
 import os
 
@@ -222,3 +224,4 @@ public final class FullScreenBars {
         }
     }
 }
+#endif

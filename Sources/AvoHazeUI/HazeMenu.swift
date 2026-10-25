@@ -1,3 +1,5 @@
+// AppKit windows and menus: macOS only.
+#if os(macOS)
 import AppKit
 import SwiftUI
 
@@ -1062,3 +1064,4 @@ private struct MenuGlow: View {
         .accessibilityHidden(true)
     }
 }
+#endif
