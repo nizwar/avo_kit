@@ -2786,31 +2786,13 @@ final class KeymapEditorView: NSView {
         }
     }
 
-    private static func title(of template: KeymapTemplate) -> String {
-        switch template {
-        case .fps: String(localized: "FPS Shooter", bundle: .avoSharedKit)
-        case .moba: String(localized: "MOBA", bundle: .avoSharedKit)
-        case .racing: String(localized: "Racing", bundle: .avoSharedKit)
-        case .platformer: String(localized: "Platformer", bundle: .avoSharedKit)
-        }
-    }
-
-    private static func symbol(of template: KeymapTemplate) -> String {
-        switch template {
-        case .fps: "scope"
-        case .moba: "cursorarrow.rays"
-        case .racing: "car"
-        case .platformer: "figure.run"
-        }
-    }
-
     // MARK: Templates
 
     /// The bar's Templates menu.
     private func templateEntries() -> [HazeMenuEntry] {
         [.note(String(localized: "Starting layouts: move each control onto the game’s button afterwards", bundle: .avoSharedKit))]
             + KeymapTemplate.allCases.map { template in
-                .item(HazeMenuItem(title: Self.title(of: template), symbol: Self.symbol(of: template)) { [weak self] in
+                .item(HazeMenuItem(title: ControllerPanelView.title(of: template), symbol: ControllerPanelView.symbol(of: template)) { [weak self] in
                     self?.chooseTemplate(template)
                     self?.refocus()
                 })
@@ -2824,7 +2806,7 @@ final class KeymapEditorView: NSView {
         }
         // Never throw the player's work away without asking.
         let alert = NSAlert()
-        alert.messageText = String(localized: "Insert the \(Self.title(of: template)) template?", bundle: .avoSharedKit)
+        alert.messageText = String(localized: "Insert the \(ControllerPanelView.title(of: template)) template?", bundle: .avoSharedKit)
         alert.informativeText = String(localized: "This layout already has controls. Add the template’s controls next to them (keys you already use stay with your controls), or replace the layout with the template. Its positions are only a starting point, and Cancel in the editor still undoes everything.",
                                        bundle: .avoSharedKit)
         alert.addButton(withTitle: String(localized: "Add to Layout", bundle: .avoSharedKit))
@@ -2859,7 +2841,7 @@ final class KeymapEditorView: NSView {
             pendingTap = nil
             hovered = nil
             drag = nil
-            var text = String(localized: "Inserted the \(Self.title(of: template)) template. Its positions are a starting point: drag each control onto the game’s own button.",
+            var text = String(localized: "Inserted the \(ControllerPanelView.title(of: template)) template. Its positions are a starting point: drag each control onto the game’s own button.",
                               bundle: .avoSharedKit)
             if !insertion.unbound.isEmpty {
                 text += " " + String(localized: "Still without a key: \(insertion.unbound.count), because your controls already use theirs. Select each “?” and press a key.",

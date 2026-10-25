@@ -288,9 +288,10 @@ private struct PresetsTab: View {
 }
 
 extension ControllerPanelView {
+    /// A template's name, the same in the editor's Templates and here.
     static func title(of template: KeymapTemplate) -> String {
         switch template {
-        case .fps: L("Shooter")
+        case .fps: L("FPS")
         case .moba: L("MOBA")
         case .racing: L("Racing")
         case .platformer: L("Platformer")

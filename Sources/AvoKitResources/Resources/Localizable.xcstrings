@@ -1635,16 +1635,6 @@
         }
       }
     },
-    "FPS Shooter" : {
-      "localizations" : {
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tembak-menembak FPS"
-          }
-        }
-      }
-    },
     "FPS mode supports one aim control" : {
       "localizations" : {
         "id" : {
@@ -3439,16 +3429,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sensitivitas"
-          }
-        }
-      }
-    },
-    "Shooter" : {
-      "localizations" : {
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tembak-menembak"
           }
         }
       }
