@@ -504,7 +504,7 @@ final class KeymapEditorView: NSView {
             return KeymapEditorModel.Listed(id: control.id, title: name(of: control), symbol: Self.symbol(of: control),
                                             keys: isEye(control) ? profile.fps?.cursorToggle.shortLabel
                                                 : keys.isEmpty ? nil : keys.joined(separator: " "),
-                                            needsKey: needsKey,
+                                            needsKey: needsKey, onGame: control.isOnGame,
                                             category: KeymapPaletteItem.item(for: control)?.category ?? .general, actions: control.actions)
         }
         if model.listed != listed { model.listed = listed }
@@ -1393,13 +1393,24 @@ final class KeymapEditorView: NSView {
     /// The modes the selected control works in (nil: every mode).
     private func setActsIn(_ modes: [String]?) {
         guard let id = selected, let i = index(of: id) else { return }
+        guard modes?.isEmpty != true else {
+            setStatus(String(localized: "“\(name(of: profile.controls[i]))” works in one mode at least: tick another first, or Every mode.", bundle: .avoSharedKit),
+                      problem: true)
+            return
+        }
         profile.controls[i].modes = modes
         let control = profile.controls[i]
         let names = (modes ?? []).compactMap { mode in profile.modes.first { $0.id == mode }?.name }
-        setStatus(names.isEmpty ? String(localized: "“\(name(of: control))” works in every mode.", bundle: .avoSharedKit)
-                                : String(localized: "“\(name(of: control))” works in \(names.formatted(.list(type: .and))).", bundle: .avoSharedKit))
-        // Out of the mode being edited: it goes from view.
-        if !control.belongs(to: editingMode) { selected = nil }
+        // Out of the mode being edited: the editor goes to its tab, the control still selected.
+        if !control.belongs(to: editingMode), let first = modes?.first {
+            hovered = nil
+            pendingTap = nil
+            editingMode = first
+            setStatus(String(localized: "“\(name(of: control))” works only in \(names.formatted(.list(type: .and))) now: its tab is shown.", bundle: .avoSharedKit))
+        } else {
+            setStatus(names.isEmpty ? String(localized: "“\(name(of: control))” works in every mode.", bundle: .avoSharedKit)
+                                    : String(localized: "“\(name(of: control))” works in \(names.formatted(.list(type: .and))).", bundle: .avoSharedKit))
+        }
         needsDisplay = true
     }
 
@@ -2601,22 +2612,40 @@ final class KeymapEditorView: NSView {
 
     private func applyControllerTemplate(_ template: KeymapTemplate) {
         let preset = template.gamepadPreset(for: profile)
+        let keyless = keylessControls()
         profile.apply(preset)
         let kind = ControllerPanelView.title(of: template)
-        setStatus(String(localized: "The controller is laid out as in \(kind) games: \(preset.bindings.count) controls. Cancel undoes it.",
-                         bundle: .avoSharedKit))
+        var text = String(localized: "The controller is laid out as in \(kind) games: \(preset.bindings.count) controls. Cancel undoes it.",
+                          bundle: .avoSharedKit)
+        let left = leftWithoutAKey(since: keyless)
+        if let left { text += " " + left }
+        setStatus(text, problem: left != nil)
         needsDisplay = true
     }
 
     private func applyPreset(named name: String) {
         guard let preset = profile.gamepad?.presets.first(where: { $0.name == name }) else { return }
+        let keyless = keylessControls()
         let skipped = profile.apply(preset)
         var text = String(localized: "Using the preset “\(name)”.", bundle: .avoSharedKit)
         if skipped > 0 {
             text += " " + String(localized: "Left out: \(skipped) of its bindings, for controls that changed or are gone.", bundle: .avoSharedKit)
         }
-        setStatus(text, problem: skipped > 0)
+        let left = leftWithoutAKey(since: keyless)
+        if let left { text += " " + left }
+        setStatus(text, problem: skipped > 0 || left != nil)
         needsDisplay = true
+    }
+
+    /// The controls that have no key of their own now.
+    private func keylessControls() -> Set<String> { Set(profile.controls.filter(Self.needsKey).map(\.id)) }
+
+    /// The controls a change left without any key (those without one before
+    /// are not news), named, or nil for none.
+    private func leftWithoutAKey(since before: Set<String>) -> String? {
+        let names = profile.controls.filter { Self.needsKey($0) && !before.contains($0.id) }.map { "“\(name(of: $0))”" }
+        guard !names.isEmpty else { return nil }
+        return String(localized: "Left without a key: \(names.formatted(.list(type: .and))). Select each “?” and press a key.", bundle: .avoSharedKit)
     }
 
     private func deletePreset(named name: String) {

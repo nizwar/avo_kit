@@ -168,6 +168,8 @@ final class KeymapEditorModel: ObservableObject {
         var keys: String?
         /// Without keys, it waits for one ("?"); a click area takes none.
         var needsKey = true
+        /// Shown on the game; a hotkey is not, so the list is its only place.
+        var onGame = true
         var category: KeymapCategory
         var actions: [ControlAction]
     }
@@ -261,6 +263,10 @@ final class KeymapEditorModel: ObservableObject {
 struct KeymapEditorPanel: View {
     /// The panel's coordinates: its hosting view's, y down from its top left.
     static let space = "avo.keymapEditorPanel"
+    /// The selected control's card, which a selection scrolls to.
+    private static let inspector = "avo.keymapEditorPanel.inspector"
+    /// A long status shows whole only when asked (it would crowd a short panel).
+    @State private var statusExpanded = false
     @ObservedObject var model: KeymapEditorModel
     @ObservedObject var controller: ControllerPanelModel
 
@@ -271,29 +277,37 @@ struct KeymapEditorPanel: View {
                            options: [(KeymapEditorModel.Tab.controls, L("Controls")), (.controller, L("Controller"))],
                            selection: model.tab, fill: true) { model.setTab($0) }
             if !model.status.isEmpty { status }
-            ScrollView(.vertical) {
-                Group {
-                    switch model.tab {
-                    case .controls:
-                        QuickRows(spacing: 14) {
-                            ModesSection(model: model)
-                            // The control just added or clicked, under the ones to add.
-                            VStack(alignment: .leading, spacing: 14) {
-                                PaletteSection(model: model)
-                                if let selection = model.selection {
-                                    InspectorCard(model: model, selection: selection)
+            ScrollViewReader { scroller in
+                ScrollView(.vertical) {
+                    Group {
+                        switch model.tab {
+                        case .controls:
+                            QuickRows(spacing: 14) {
+                                ModesSection(model: model)
+                                // The control just added or clicked, under the ones to add.
+                                VStack(alignment: .leading, spacing: 14) {
+                                    PaletteSection(model: model)
+                                    if let selection = model.selection {
+                                        InspectorCard(model: model, selection: selection)
+                                            .id(Self.inspector)
+                                    }
                                 }
+                                if !model.listed.isEmpty { ControlListSection(model: model) }
+                                DisplaySection(model: model)
+                                LayoutSection(model: model)
                             }
-                            if !model.listed.isEmpty { ControlListSection(model: model) }
-                            DisplaySection(model: model)
-                            LayoutSection(model: model)
+                        case .controller:
+                            ControllerPanelView(model: controller)
                         }
-                    case .controller:
-                        ControllerPanelView(model: controller)
                     }
+                    .padding(.top, 4)
+                    .padding(.bottom, 16)
                 }
-                .padding(.top, 4)
-                .padding(.bottom, 16)
+                // A control picked from the list (or the game): its card comes into view, not off above it.
+                .onChange(of: model.selection?.control.id) { _, id in
+                    guard id != nil else { return }
+                    withAnimation(.easeOut(duration: 0.2)) { scroller.scrollTo(Self.inspector) }
+                }
             }
         }
         .padding(.horizontal, 14)
@@ -330,6 +344,9 @@ struct KeymapEditorPanel: View {
         }
     }
 
+    /// About three lines of the status at the panel's width.
+    private static let longStatus = 150
+
     /// What to do now, or what just happened.
     private var status: some View {
         let yellow = Color(nsColor: .systemYellow)
@@ -338,12 +355,22 @@ struct KeymapEditorPanel: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(model.problem ? yellow : QuickHaze.accent)
                 .padding(.top, 1)
-            Text(verbatim: model.status)
-                .font(QuickHaze.mona(12))
-                .foregroundStyle(model.problem ? yellow : QuickHaze.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(verbatim: model.status)
+                    .font(QuickHaze.mona(12))
+                    .foregroundStyle(model.problem ? yellow : QuickHaze.textSecondary)
+                    .lineLimit(statusExpanded ? nil : 3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if model.status.count > Self.longStatus {
+                    Button(statusExpanded ? L("Less") : L("More")) { statusExpanded.toggle() }
+                        .buttonStyle(.plain)
+                        .font(QuickHaze.mona(11.5, 620))
+                        .foregroundStyle(QuickHaze.accentText)
+                }
+            }
         }
+        .onChange(of: model.status) { _, _ in statusExpanded = false }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(QuickHaze.inset))
         .accessibilityElement(children: .combine)
@@ -438,7 +465,17 @@ private struct ControlListSection: View {
             .buttonStyle(.plain)
             .help(shown ? L("Hide the list of controls") : L("Show the list of controls"))
             .accessibilityAddTraits(.isHeader)
-            if shown {
+            if !shown {
+                // Hotkeys have no place on the game: the list is the only way to them.
+                let hotkeys = model.listed.filter { !$0.onGame }
+                if !hotkeys.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(hotkeys) { row in
+                            ControlListRow(model: model, row: row, selected: model.selection?.control.id == row.id)
+                        }
+                    }
+                }
+            } else {
                 ForEach(KeymapCategory.allCases) { category in
                     let rows = model.listed.filter { $0.category == category }
                     if !rows.isEmpty {
@@ -518,6 +555,9 @@ private struct DisplaySection: View {
                 QuickSlider(label: L("Editor opacity"),
                             value: Binding(get: { model.editorOpacity }, set: { model.setEditorOpacity($0) }),
                             range: KeymapEditorView.opacityRange, step: 0.05, valueText: Text(model.editorOpacity, format: percent))
+            }
+            if !model.outside {
+                QuickCaption(L("Inside the window (in full screen, or with no room beside it), this panel makes the game smaller while you edit."))
             }
         }
     }
@@ -832,9 +872,8 @@ private struct InspectorCard: View {
                     Chip(title: mode.name, on: own?.contains(mode.id) == true) {
                         var modes = own ?? []
                         if let at = modes.firstIndex(of: mode.id) { modes.remove(at: at) } else { modes.append(mode.id) }
-                        // In the layout's order, and never none.
-                        let ordered = model.modes.map(\.id).filter(modes.contains)
-                        if !ordered.isEmpty { model.setActsIn(ordered) }
+                        // In the layout's order; none is refused by the editor, with why.
+                        model.setActsIn(model.modes.map(\.id).filter(modes.contains))
                     }
                 }
             }

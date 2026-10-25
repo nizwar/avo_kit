@@ -1985,6 +1985,16 @@
         }
       }
     },
+    "Inside the window (in full screen, or with no room beside it), this panel makes the game smaller while you edit." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Di dalam jendela (di layar penuh, atau tanpa ruang di sampingnya), panel ini membuat game lebih kecil selama Anda mengedit."
+          }
+        }
+      }
+    },
     "Inverted" : {
       "localizations" : {
         "id" : {
@@ -2241,6 +2251,26 @@
         }
       }
     },
+    "Left without a key: %@. Select each “?” and press a key." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kini tanpa tombol: %@. Pilih tiap “?” lalu tekan sebuah tombol."
+          }
+        }
+      }
+    },
+    "Less" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ringkas"
+          }
+        }
+      }
+    },
     "Let go to choose a control" : {
       "localizations" : {
         "id" : {
@@ -2417,6 +2447,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mode"
+          }
+        }
+      }
+    },
+    "More" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selengkapnya"
           }
         }
       }
@@ -4705,6 +4745,32 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“%@” bekerja di semua mode."
+          }
+        }
+      }
+    },
+    "“%@” works in one mode at least: tick another first, or Every mode." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” bekerja di setidaknya satu mode: centang mode lain dulu, atau Semua mode."
+          }
+        }
+      }
+    },
+    "“%@” works only in %@ now: its tab is shown." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "“%1$@” works only in %2$@ now: its tab is shown."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%1$@” sekarang hanya bekerja di %2$@: tabnya ditampilkan."
           }
         }
       }
