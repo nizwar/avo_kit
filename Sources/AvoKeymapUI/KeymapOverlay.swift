@@ -129,6 +129,16 @@ final class KeymapOverlay {
         editor.cancel()
     }
 
+    /// The window is closing: see KeymapEditorView.mayClose.
+    func mayClose(answer: @escaping @MainActor (Bool) -> Void) -> Bool {
+        editor.mayClose(answer: answer)
+    }
+
+    /// A message for the player, in the panel's status line while the editor covers the window.
+    func showNotice(_ text: String) {
+        editor.showNotice(text)
+    }
+
     /// Key presses routed here while the editor is open.
     func assign(_ trigger: Trigger, down: Bool) -> Bool {
         if down { editor.assign(trigger) }

@@ -3303,6 +3303,16 @@
         }
       }
     },
+    "Save" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Simpan"
+          }
+        }
+      }
+    },
     "Save Preset" : {
       "localizations" : {
         "id" : {
@@ -3349,6 +3359,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Simpan pemetaan tombol dan tutup editor"
+          }
+        }
+      }
+    },
+    "Save your key mapping changes?" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Simpan perubahan pemetaan tombol?"
           }
         }
       }
@@ -3965,6 +3985,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Roda mouse hanya bisa untuk Ketuk, Geser, dan Hotkey."
+          }
+        }
+      }
+    },
+    "The window is closing. Your changes go unless you save them." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jendela akan ditutup. Perubahan Anda hilang kecuali Anda menyimpannya."
           }
         }
       }

@@ -302,6 +302,20 @@ struct KeymapControllerTests {
         #expect(!keymap.key(.g, down: true, isRepeat: true), "a key the mapping does not use is the game's")
     }
 
+    @Test("Without the editor open the window closes at once, and notices are the window's")
+    func closingWithoutTheEditor() {
+        let host = Host(gameMode: true, bundled: jump)
+        let keymap = host.controller()
+        defer { keymap.stop() }
+        var notices: [String] = []
+        keymap.onNotice = { notices.append($0) }
+        #expect(!keymap.isEditing)
+        #expect(keymap.mayClose { _ in })
+        #expect(!keymap.showInEditor("x"))
+        keymap.setGameMode(false)
+        #expect(notices.count == 1, "the window's own notice")
+    }
+
     @Test("Without a profile, Game Mode says how to set one up and maps nothing")
     func noProfileMapsNothing() {
         let host = Host()

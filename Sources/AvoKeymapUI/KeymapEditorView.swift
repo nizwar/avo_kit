@@ -2881,6 +2881,13 @@ final class KeymapEditorView: NSView {
     /// Saves the profile and closes the editor; stays open on problems.
     @objc private func saveAndClose() {
         guard !isAsking else { return }
+        save()
+    }
+
+    /// Saves the profile and closes the editor; on problems it stays open,
+    /// saying what (false).
+    @discardableResult
+    private func save() -> Bool {
         let problems = profile.validate()
         guard problems.isEmpty else {
             var message = problems.first ?? String(localized: "This profile has problems.", bundle: .avoSharedKit)
@@ -2897,13 +2904,14 @@ final class KeymapEditorView: NSView {
                     : Self.sentence(first.dropFirst("\(control.id):".count))
             }
             setStatus(message, problem: true)
-            return
+            return false
         }
         if let error = onSave(profile) {
             setStatus(String(localized: "Could not save: \(error)", bundle: .avoSharedKit), problem: true)
-        } else {
-            close()
+            return false
         }
+        close()
+        return true
     }
 
     /// A control that acts on its own key (not a joystick's four, nor the
@@ -2981,6 +2989,44 @@ final class KeymapEditorView: NSView {
 
     /// One of the editor's questions is up over the game.
     var isAsking: Bool { window?.attachedSheet != nil || barModel.sheetUp }
+
+    /// The game's window is closing (or its app quitting). Without changes
+    /// the editor closes and so may the window (true). With changes it asks
+    /// (Save, Discard, Keep Editing) and says false for now; `answer` gets
+    /// true once they are saved or discarded (the window may close then),
+    /// false to keep editing.
+    func mayClose(answer: @escaping @MainActor (Bool) -> Void) -> Bool {
+        guard !isAsking else { return false }
+        guard profile != original, let window else {
+            close()
+            return true
+        }
+        let alert = NSAlert()
+        alert.messageText = String(localized: "Save your key mapping changes?", bundle: .avoSharedKit)
+        alert.informativeText = String(localized: "The window is closing. Your changes go unless you save them.", bundle: .avoSharedKit)
+        alert.addButton(withTitle: String(localized: "Save", bundle: .avoSharedKit))
+        alert.addButton(withTitle: String(localized: "Discard", bundle: .avoSharedKit)).hasDestructiveAction = true
+        alert.addButton(withTitle: String(localized: "Keep Editing", bundle: .avoSharedKit)).keyEquivalent = "\u{1b}"
+        ask(alert, over: window) { [weak self] response in
+            guard let self else { return answer(true) }
+            switch response {
+            // With problems it stays open and says what: the window stays.
+            case .alertFirstButtonReturn: answer(save())
+            case .alertSecondButtonReturn:
+                close()
+                answer(true)
+            default:
+                refocus()
+                answer(false)
+            }
+        }
+        return false
+    }
+
+    /// A message for the player while the editor covers the window's own (a mode switched, Game Mode).
+    func showNotice(_ text: String) {
+        setStatus(text)
+    }
 
     /// Asks `alert` over the game's window, one question at a time: the
     /// panel waits for the answer (its buttons would act behind it).

@@ -97,3 +97,26 @@ struct KeymapEditorFocusTests {
         #expect(editor.profile.controls.isEmpty)
     }
 }
+
+@MainActor
+@Suite("Closing the window while the editor is open")
+struct KeymapEditorClosingTests {
+    @Test("Without changes the window may close at once; while a question is up it waits")
+    func mayCloseWithoutChanges() {
+        let editor = Editor(KeymapProfile(package: "x", name: "x", controls: [Control(id: "t", kind: .tap(NormalizedPoint(0.5, 0.5)), triggers: [.key(.t)])]))
+        defer { editor.close() }
+        var answered: Bool?
+        #expect(editor.view.mayClose { answered = $0 })
+        #expect(answered == nil, "nothing asked")
+        editor.model.sheetUp = true
+        #expect(!editor.view.mayClose { answered = $0 })
+    }
+
+    @Test("A notice while the editor is open shows in its panel")
+    func noticesShowInThePanel() {
+        let editor = Editor(KeymapProfile(package: "x", name: "x", controls: []))
+        defer { editor.close() }
+        editor.view.showNotice("Mode: Car")
+        #expect(editor.model.status == "Mode: Car")
+    }
+}

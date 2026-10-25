@@ -45,7 +45,8 @@ public final class KeymapController {
     private var lastReleaseCheck: CFTimeInterval = 0
     /// What `releaseUnseen` let go: its late release, should it still come, is swallowed.
     private var letGoUnseen: Set<Trigger> = []
-    /// Short messages for the window (mouse locked or freed).
+    /// Short messages for the window (mouse locked or freed). While the
+    /// editor is open they show in its panel instead (it covers the window's).
     public var onNotice: ((String) -> Void)?
     /// The layout's mode changed (a Switch Mode control, a new layout): its id.
     public var onMode: ((String?) -> Void)?
@@ -78,10 +79,10 @@ public final class KeymapController {
         onGameMode?(on)
         guard profile != nil else {
             // Nothing to map yet: the button alone would light up and do nothing.
-            if on { onNotice?(String(localized: "This app has no key mapping yet. Press ⇧⌘K to set one up.", bundle: .avoSharedKit)) }
+            if on { notice(String(localized: "This app has no key mapping yet. Press ⇧⌘K to set one up.", bundle: .avoSharedKit)) }
             return
         }
-        onNotice?(on ? String(localized: "Game Mode on: the key mapping is active. ⌘G turns it off.", bundle: .avoSharedKit)
+        notice(on ? String(localized: "Game Mode on: the key mapping is active. ⌘G turns it off.", bundle: .avoSharedKit)
                      : String(localized: "Game Mode off: keys and clicks go to the app. ⌘G turns it on.", bundle: .avoSharedKit))
     }
 
@@ -346,7 +347,7 @@ public final class KeymapController {
         if let mode = output.mode {
             onMode?(mode)
             if let name = profile?.modes.first(where: { $0.id == mode })?.name {
-                onNotice?(String(localized: "Mode: \(name)", bundle: .avoSharedKit))
+                notice(String(localized: "Mode: \(name)", bundle: .avoSharedKit))
             }
         }
         if let lock = output.pointerLock {
@@ -438,7 +439,7 @@ public final class KeymapController {
         guard !isPointerLocked, let view, let window = view.window else { return }
         isPointerLocked = true
         if let toggle = engine?.profile.fps?.cursorToggle.shortLabel {
-            onNotice?(String(localized: "Mouse locked for aiming. Press \(toggle) to free it.", bundle: .avoSharedKit))
+            notice(String(localized: "Mouse locked for aiming. Press \(toggle) to free it.", bundle: .avoSharedKit))
         }
         CGAssociateMouseAndMouseCursorPosition(0)
         NSCursor.hide()
@@ -459,7 +460,7 @@ public final class KeymapController {
         guard isPointerLocked else { return }
         isPointerLocked = false
         if let toggle = engine?.profile.fps?.cursorToggle.shortLabel {
-            onNotice?(String(localized: "Mouse free. Press \(toggle) to aim with it.", bundle: .avoSharedKit))
+            notice(String(localized: "Mouse free. Press \(toggle) to aim with it.", bundle: .avoSharedKit))
         }
         stopListeningToMice()
         CGAssociateMouseAndMouseCursorPosition(1)
@@ -556,6 +557,34 @@ public final class KeymapController {
     }
 
     // MARK: Editor (Cmd+Shift+K)
+
+    /// The key mapping editor is open over the window (its menu item then closes it).
+    public var isEditing: Bool { overlay?.isEditing == true }
+
+    /// Whether the window may close now (the red button, ⌘W, quitting).
+    /// With the editor open and changes in it, the editor asks first (Save,
+    /// Discard, Keep Editing) and this says false; `answer` then gets true
+    /// once the changes are saved or discarded (close the window there) or
+    /// false to keep editing. Without the editor, or without changes, true:
+    /// the editor (if open) closes, and the window may close at once.
+    public func mayClose(answer: @escaping @MainActor (Bool) -> Void) -> Bool {
+        guard let overlay, overlay.isEditing else { return true }
+        return overlay.mayClose(answer: answer)
+    }
+
+    /// Shows `text` in the editor's panel while the editor is open (true),
+    /// where the window's own notices would be under it; false otherwise.
+    @discardableResult
+    public func showInEditor(_ text: String) -> Bool {
+        guard let overlay, overlay.isEditing else { return false }
+        overlay.showNotice(text)
+        return true
+    }
+
+    /// A message for the player: in the editor while it is open, else the window's.
+    private func notice(_ text: String) {
+        if !showInEditor(text) { onNotice?(text) }
+    }
 
     /// Opens the editor, or closes it. Its bar's Controller button brings
     /// the controller panel out (ControllerPanel.swift).
