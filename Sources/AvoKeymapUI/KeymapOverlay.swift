@@ -14,7 +14,9 @@ import AvoKitResources
 /// left, else the window moves over a little as the editor opens (and back
 /// as it closes, unless it was moved meanwhile). In full screen, or on a
 /// screen too narrow even then, it is inside, beside the game, which moves
-/// over for it.
+/// over for it. While the player resizes or moves the window, the panel
+/// keeps its side (out of sight where it no longer fits) and is placed
+/// again once the window is let go, so neither it nor the game jumps.
 @MainActor
 final class KeymapOverlay {
     private let editor: KeymapEditorView
@@ -30,6 +32,13 @@ final class KeymapOverlay {
     private var moved: (from: NSRect, to: NSRect)?
     /// Its own move is under way: not one by the user.
     private var moving = false
+    /// The panel's side beside the window (true: the right), nil while it is inside.
+    private var sideRight: Bool?
+    /// Waits for the window to stop moving before the panel's side is chosen again.
+    private var settle: Timer?
+    /// The window's least content size before the panel went inside, which widens it.
+    private var minimumBefore: NSSize?
+    private var screenObserver: NSObjectProtocol?
     var onClose: (() -> Void)?
     /// The panel went inside the window (true: the game moves over for it)
     /// or outside (false).
@@ -39,6 +48,10 @@ final class KeymapOverlay {
     private static let gap: CGFloat = 8
     /// The panel is at least this tall beside a short window, when the screen has room.
     private static let minimumHeight: CGFloat = 560
+    /// The game keeps at least this much width beside the panel inside the window.
+    private static let minimumGameWidth: CGFloat = 120
+    /// How long the window rests before a move counts as done.
+    private static let settleDelay: TimeInterval = 0.3
 
     var isEditing: Bool { editor.superview != nil }
 
@@ -67,7 +80,7 @@ final class KeymapOverlay {
         let center = NotificationCenter.default
         // The panel follows the window: its size, its screen, full screen.
         for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification, NSWindow.didChangeScreenNotification,
-                     NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification] {
+                     NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification, NSWindow.didEndLiveResizeNotification] {
             observers.append(center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.windowChanged(name) }
             })
@@ -83,6 +96,10 @@ final class KeymapOverlay {
         observers.append(center.addObserver(forName: NSWindow.didDeminiaturizeNotification, object: window, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.placePanel(opening: false) }
         })
+        // A display added, taken away or rearranged.
+        screenObserver = center.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.placePanel(opening: false) }
+        }
         placePanel(opening: true)
     }
 
@@ -90,6 +107,11 @@ final class KeymapOverlay {
         guard isEditing else { return }
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers = []
+        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+        screenObserver = nil
+        settle?.invalidate()
+        settle = nil
+        restoreMinimumSize()
         hideSide()
         editor.movePanel(into: nil)
         editor.removeFromSuperview()
@@ -117,16 +139,46 @@ final class KeymapOverlay {
 
     private func windowChanged(_ name: Notification.Name) {
         guard !moving, let window else { return }
-        if name == NSWindow.didMoveNotification {
+        switch name {
+        case NSWindow.didMoveNotification:
             // Moved by the user: it stays where they put it.
             if let moved, window.frame != moved.to { self.moved = nil }
-            // The panel moves with it, as a child window; it changes sides only once it leaves the screen.
-            if side.parent != nil, let visible = window.screen?.visibleFrame, visible.contains(side.frame) { return }
+            // The panel moves with it, as a child window; out of sight while
+            // off the screen, and its side chosen again once the window rests.
+            if side.parent != nil, !Self.screens.contains(where: { $0.contains(side.frame) }) { hideSide() }
+            settleSoon()
+        case NSWindow.didResizeNotification where window.inLiveResize:
+            followLiveResize()
+        default:
+            placePanel(opening: false)
         }
-        placePanel(opening: false)
     }
 
-    /// Beside the window when its screen has room: on the right, else on the
+    /// The window is being resized by the player: the panel keeps its side,
+    /// beside the window where it fits and out of sight where it does not;
+    /// inside, it stays inside. The side is chosen again at the end.
+    private func followLiveResize() {
+        guard let window, let right = sideRight else { return }
+        if let frame = Self.sideFrame(beside: window.frame, content: screenFrame, right: right, screens: Self.screens,
+                                      width: KeymapEditorView.panelWidth, gap: Self.gap, minimumHeight: Self.minimumHeight) {
+            showSide(at: frame)
+        } else {
+            hideSide()
+        }
+    }
+
+    /// Places the panel once the window has stopped moving for a moment.
+    private func settleSoon() {
+        settle?.invalidate()
+        settle = Timer.scheduledTimer(withTimeInterval: Self.settleDelay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let window = self.window, !window.inLiveResize else { return }
+                self.placePanel(opening: false)
+            }
+        }
+    }
+
+    /// Beside the window when a screen has room: on the right, else on the
     /// left, else (`opening`) the window moves over so it fits on the right.
     /// Inside, beside the game, in full screen or without room even then.
     private func placePanel(opening: Bool) {
@@ -136,10 +188,14 @@ final class KeymapOverlay {
             return
         }
         let width = KeymapEditorView.panelWidth
-        if let frame = sideFrame(beside: window.frame, right: true, visible: visible) {
-            showSide(at: frame)
-        } else if let frame = sideFrame(beside: window.frame, right: false, visible: visible) {
-            showSide(at: frame)
+        func beside(_ frame: NSRect, right: Bool) -> NSRect? {
+            Self.sideFrame(beside: frame, content: screenFrame(for: frame), right: right, screens: Self.screens, width: width, gap: Self.gap,
+                           minimumHeight: Self.minimumHeight)
+        }
+        if let frame = beside(window.frame, right: true) {
+            showSide(at: frame, right: true)
+        } else if let frame = beside(window.frame, right: false) {
+            showSide(at: frame, right: false)
         } else if opening, window.frame.width + Self.gap + width <= visible.width {
             var frame = window.frame
             let from = frame
@@ -148,8 +204,8 @@ final class KeymapOverlay {
             window.setFrame(frame, display: true, animate: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
             moving = false
             moved = (from, window.frame)
-            if let beside = sideFrame(beside: window.frame, right: true, visible: visible) {
-                showSide(at: beside)
+            if let besideFrame = beside(window.frame, right: true) {
+                showSide(at: besideFrame, right: true)
             } else {
                 putPanelInside()
             }
@@ -158,21 +214,46 @@ final class KeymapOverlay {
         }
     }
 
-    /// The panel's frame beside `frame` on one side, if it fits on the
-    /// screen: from the window's top, as tall as the window (or as
-    /// `minimumHeight`, beside a short one).
-    private func sideFrame(beside frame: NSRect, right: Bool, visible: NSRect) -> NSRect? {
-        let width = KeymapEditorView.panelWidth
-        let x = right ? frame.maxX + Self.gap : frame.minX - Self.gap - width
-        guard x >= visible.minX, x + width <= visible.maxX else { return nil }
-        let top = min(frame.maxY, visible.maxY)
-        let height = min(max(frame.height, Self.minimumHeight), visible.height)
-        let bottom = max(top - height, visible.minY)
-        return NSRect(x: x, y: bottom, width: width, height: top - bottom)
+    /// The displays' usable parts: the panel may stand on the one beside the window's.
+    private static var screens: [NSRect] { NSScreen.screens.map(\.visibleFrame) }
+
+    /// Where the game's screen is, in screen coordinates (inside the Phone
+    /// app bar style's frame around it): the panel's top lines up with it.
+    private var screenFrame: NSRect? { screenFrame(for: nil) }
+
+    /// The game's screen for the window at `frame` (it keeps its place in the window).
+    private func screenFrame(for frame: NSRect?) -> NSRect? {
+        guard let window, let screen, screen.window === window else { return nil }
+        let now = window.convertToScreen(screen.convert(screen.bounds, to: nil))
+        guard let frame else { return now }
+        return now.offsetBy(dx: frame.minX - window.frame.minX, dy: frame.minY - window.frame.minY)
     }
 
-    private func showSide(at frame: NSRect) {
+    /// The panel's frame beside `window` on one side, if a display has room
+    /// for it there (the window's own, or the one beside it): from the
+    /// game's screen's top (`content`, else the window's), as tall as it (or
+    /// as `minimumHeight`, beside a short one), and never a sliver.
+    static func sideFrame(beside window: NSRect, content: NSRect?, right: Bool, screens: [NSRect], width: CGFloat, gap: CGFloat,
+                          minimumHeight: CGFloat) -> NSRect? {
+        let x = right ? window.maxX + gap : window.minX - gap - width
+        let reference = content ?? window
+        for visible in screens where x >= visible.minX && x + width <= visible.maxX {
+            let top = min(reference.maxY, visible.maxY)
+            let height = min(max(reference.height, minimumHeight), visible.height)
+            let bottom = max(top - height, visible.minY)
+            guard top - bottom >= Self.shortest else { continue }
+            return NSRect(x: x, y: bottom, width: width, height: top - bottom)
+        }
+        return nil
+    }
+
+    /// The shortest the panel stands beside the window.
+    static let shortest: CGFloat = 200
+
+    private func showSide(at frame: NSRect, right: Bool? = nil) {
         guard let window else { return }
+        if let right { sideRight = right }
+        restoreMinimumSize()
         if side.parent == nil {
             editor.movePanel(into: side.host)
             onPanelInside?(false)
@@ -198,8 +279,35 @@ final class KeymapOverlay {
 
     private func putPanelInside() {
         hideSide()
+        sideRight = nil
         editor.movePanel(into: nil)
+        makeRoomInside()
         onPanelInside?(true)
+    }
+
+    /// Inside, the panel takes its width from the game: the window is at
+    /// least that much wider than the game's narrowest, and grows to it now
+    /// when it is narrower (not in full screen).
+    private func makeRoomInside() {
+        guard let window, !window.styleMask.contains(.fullScreen), let content = window.contentView else { return }
+        let needed = KeymapEditorView.panelWidth + Self.minimumGameWidth
+        if minimumBefore == nil { minimumBefore = window.contentMinSize }
+        window.contentMinSize.width = max(minimumBefore?.width ?? 0, needed)
+        let missing = needed - content.bounds.width
+        guard missing > 0 else { return }
+        var frame = window.frame
+        frame.size.width += missing
+        if let visible = window.screen?.visibleFrame, frame.maxX > visible.maxX { frame.origin.x = max(visible.minX, visible.maxX - frame.width) }
+        moving = true
+        window.setFrame(frame, display: true)
+        moving = false
+    }
+
+    /// The window's least size as it was, once the panel is out of it.
+    private func restoreMinimumSize() {
+        guard let before = minimumBefore, let window else { return }
+        window.contentMinSize = before
+        minimumBefore = nil
     }
 
     private func hideSide() {

@@ -271,6 +271,17 @@ final class KeymapEditorView: NSView {
         refreshBar()
     }
 
+    /// Inside a screen with round corners (the Phone app bar style), the
+    /// panel stands clear of them: its own corners would be cut off.
+    override func layout() {
+        super.layout()
+        let corner = superview?.layer.flatMap { $0.masksToBounds ? $0.cornerRadius : 0 } ?? 0
+        if panelInside[0].constant != corner {
+            panelInside[0].constant = corner
+            panelInside[1].constant = -corner
+        }
+    }
+
     /// Moves the panel into `host`, the content of its own window beside the
     /// game's, or back inside this view, at its edge, for nil.
     func movePanel(into host: NSView?) {
