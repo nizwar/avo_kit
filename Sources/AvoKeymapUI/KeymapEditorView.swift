@@ -2652,9 +2652,13 @@ final class KeymapEditorView: NSView {
     private func keylessControls() -> Set<String> { Set(profile.controls.filter(Self.needsKey).map(\.id)) }
 
     /// The controls a change left without any key (those without one before
-    /// are not news), named, or nil for none.
+    /// are not news), each kind named once, or nil for none.
     private func leftWithoutAKey(since before: Set<String>) -> String? {
-        let names = profile.controls.filter { Self.needsKey($0) && !before.contains($0.id) }.map { "“\(name(of: $0))”" }
+        var names: [String] = []
+        for control in profile.controls where Self.needsKey(control) && !before.contains(control.id) {
+            let quoted = "“\(name(of: control))”"
+            if !names.contains(quoted) { names.append(quoted) }
+        }
         guard !names.isEmpty else { return nil }
         return String(localized: "Left without a key: \(names.formatted(.list(type: .and))). Select each “?” and press a key.", bundle: .avoSharedKit)
     }
