@@ -10,7 +10,7 @@
 //   AvoKeymap    key mapping profiles and the engine that turns keys, the
 //                mouse and controllers into touches
 //   AvoHazeUI    the haze in small: QuickHaze's colours and type, the Quick*
-//                controls, and HazeMenu
+//                controls, HazeMenu, and FullScreenBars
 //   AvoKeymapUI  the key mapping a window runs over its game view: the
 //                controller, the editor and its panels, the hints, GamepadHub
 //
@@ -38,6 +38,7 @@ let package = Package(
         .target(name: "AvoKeymapUI", dependencies: ["AvoKitResources", "AvoInput", "AvoKeymap", "AvoHazeUI"]),
         .testTarget(name: "AvoKeymapTests", dependencies: ["AvoKeymap", "AvoInput", "AvoScreen"]),
         .testTarget(name: "AvoKeymapUITests", dependencies: ["AvoKeymapUI", "AvoKeymap", "AvoInput"]),
+        .testTarget(name: "AvoHazeUITests", dependencies: ["AvoHazeUI"]),
     ],
     swiftLanguageModes: [.v6]
 )
