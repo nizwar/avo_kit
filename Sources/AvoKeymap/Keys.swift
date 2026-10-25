@@ -60,6 +60,35 @@ public enum KeyboardMapping {
     public static func androidKeyCode(for key: KeyName) -> UInt32? { byName[key]?.1 }
     public static func macKeyCode(for key: KeyName) -> UInt16? { byName[key]?.0 }
 
+    /// Whether the modifier `key` is down, as a flags-changed event's
+    /// `modifierFlags` (`flags`, its raw value) says. A view that counted the
+    /// changes instead missed one whenever another window had the keyboard
+    /// for it (⇧⌘K: Shift went down in the game, up in the editor), and from
+    /// then on read every press as a release: a joystick's run key walked
+    /// while held and ran once let go (the user, 2026-10-25). The flags name
+    /// each side's key (the device bits), so letting go of one Shift while
+    /// the other is held reads right; flags without them fall back to the
+    /// modifier as a whole. Caps Lock is down while it is locked on.
+    public static func isModifierDown(_ key: KeyName, flags: UInt) -> Bool {
+        let side: UInt
+        let whole: UInt
+        switch key {
+        case .shift: (side, whole) = (0x02, 1 << 17)
+        case .rightShift: (side, whole) = (0x04, 1 << 17)
+        case .control: (side, whole) = (0x01, 1 << 18)
+        case .rightControl: (side, whole) = (0x2000, 1 << 18)
+        case .option: (side, whole) = (0x20, 1 << 19)
+        case .rightOption: (side, whole) = (0x40, 1 << 19)
+        case .command: (side, whole) = (0x08, 1 << 20)
+        case .rightCommand: (side, whole) = (0x10, 1 << 20)
+        case .capsLock: return flags & (1 << 16) != 0
+        default: return false
+        }
+        // The device bits of all eight keys (NX_DEVICE*KEYMASK).
+        let anySide: UInt = 0x01 | 0x02 | 0x04 | 0x08 | 0x10 | 0x20 | 0x40 | 0x2000
+        return flags & anySide != 0 ? flags & side != 0 : flags & whole != 0
+    }
+
     /// Android KEYCODE_BACK, sent for Esc and the two-finger swipe left (spec §1).
     public static let androidBack: UInt32 = 4
 
