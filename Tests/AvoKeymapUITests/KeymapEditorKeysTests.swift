@@ -37,19 +37,29 @@ struct KeymapEditorKeysTests {
         #expect(editor.profile.controls[0].triggers == [.key(.shift)])
     }
 
-    @Test("Esc lets go of a waiting tap, then of the selection, and binds nothing")
-    func escapeLetsGo() {
+    @Test("Esc is a key like any other: a new tap takes it, and so does the selected control")
+    func escapeIsAKey() {
         let editor = Editor(KeymapProfile(package: "x", name: "x", controls: [tap()]))
         defer { editor.close() }
         editor.click(0.2, 0.2)
         #expect(Mirror(reflecting: editor.view).descendant("pendingTap") as? NormalizedPoint != nil)
         editor.press(MacKey.escape)
         #expect(Mirror(reflecting: editor.view).descendant("pendingTap") as? NormalizedPoint == nil)
-        #expect(editor.profile.controls.count == 1, "no tap placed on Esc")
+        #expect(editor.profile.controls.count == 2, "the tap is placed, not thrown away")
+        #expect(editor.profile.controls.last?.triggers == [.key(.escape)])
         editor.model.select("t")
         editor.press(MacKey.escape)
-        #expect(editor.model.selection == nil)
-        #expect(editor.profile.controls[0].triggers == [.key(.t)])
+        #expect(editor.profile.controls[0].triggers == [.key(.escape)])
+    }
+
+    @Test("Delete takes back a waiting tap")
+    func deleteCancelsAWaitingTap() {
+        let editor = Editor(KeymapProfile(package: "x", name: "x", controls: [tap()]))
+        defer { editor.close() }
+        editor.click(0.2, 0.2)
+        editor.press(MacKey.delete)
+        #expect(Mirror(reflecting: editor.view).descendant("pendingTap") as? NormalizedPoint == nil)
+        #expect(editor.profile.controls.map(\.id) == ["t"])
     }
 
     @Test("Delete removes the selected control, and ⌘Z brings it back")
@@ -104,14 +114,11 @@ struct KeymapEditorKeysTests {
         #expect(editor.model.selection == nil)
     }
 
-    @Test("Esc and Delete are a control's keys from its menu")
-    func escapeFromTheMenu() throws {
+    @Test("Delete is a control's key from its menu")
+    func deleteFromTheMenu() throws {
         let editor = Editor(KeymapProfile(package: "x", name: "x", controls: [tap()]))
         defer { editor.close() }
         editor.model.select("t")
-        let esc = try #require(editor.item(String(localized: "Esc Key", bundle: .avoSharedKit), in: editor.model.mouseButtons()))
-        esc.action()
-        #expect(editor.profile.controls[0].triggers == [.key(.escape)])
         let delete = try #require(editor.item(String(localized: "Delete Key", bundle: .avoSharedKit), in: editor.model.mouseButtons()))
         delete.action()
         #expect(editor.profile.controls[0].triggers == [.key(.delete)])

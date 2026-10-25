@@ -15,9 +15,9 @@ import UniformTypeIdentifiers
 /// selected control's keys, modes and settings. On the game: drag an
 /// object's body to move it, its ↘ handle to set how far it reaches, × to
 /// remove it. With an object selected the next key is its trigger (a
-/// modifier once it is let go on its own, never one held for a shortcut);
-/// Esc lets go of it and Delete removes it, so right-click binds them, as
-/// it binds mouse buttons and the wheel. ⌘Z undoes the last change. ⌥ +
+/// modifier once it is let go on its own, never one held for a shortcut),
+/// Esc as well; Delete removes it, so right-click binds Delete, as it binds
+/// mouse buttons and the wheel. ⌘Z undoes the last change. ⌥ +
 /// arrow keys move the selected object and ⌥⇧ + arrow keys resize it. The eye is a swipe area with a point
 /// (where its finger touches down): while it is selected, drag the area to
 /// move it, its edges and corners to resize it, the point to move it within.
@@ -925,20 +925,15 @@ final class KeymapEditorView: NSView {
     /// Edit › Undo, from the menu bar.
     @objc func undo(_ sender: Any?) { undo() }
 
-    /// Esc: the tap waiting for its key goes, else the selection; Delete
-    /// removes the selected control. Either is a control's key from its menus.
-    private func letGo(removing: Bool) {
+    /// Delete: the tap waiting for its key goes, else the selected control.
+    /// It is a control's key from its menu; Esc is a key like any other
+    /// (games use it), so a new tap takes it (the user: Esc threw the tap away).
+    private func deleteKey() {
         if pendingTap != nil {
             pendingTap = nil
             showHelp()
         } else if let id = selected {
-            if removing {
-                remove(id)
-            } else {
-                selected = nil
-                setStatus(String(localized: "Esc lets go of the control. To make Esc or Delete a control’s key, right-click the control.",
-                                 bundle: .avoSharedKit))
-            }
+            remove(id)
         }
         needsDisplay = true
     }
@@ -1281,7 +1276,7 @@ final class KeymapEditorView: NSView {
     }
 
     /// Right-click: what the control takes as its key (mouse buttons, the
-    /// wheel, Esc, Delete), its area's choices, its modes, its actions and
+    /// wheel, Delete), its area's choices, its modes, its actions and
     /// removal; on the game, a tap there for a mouse button.
     override func rightMouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
@@ -1365,7 +1360,7 @@ final class KeymapEditorView: NSView {
     }
 
     /// A mouse button or the wheel for a control, as the menus list them,
-    /// and the keys the editor keeps for itself (Esc lets go, Delete removes).
+    /// and the key the editor keeps for itself (Delete removes).
     static var mouseChoices: [(title: String, trigger: Trigger, symbol: String)] {
         [
             (String(localized: "Left Click", bundle: .avoSharedKit), .mouse(.left), "cursorarrow.click"),
@@ -1375,7 +1370,6 @@ final class KeymapEditorView: NSView {
             (String(localized: "Mouse Button 5", bundle: .avoSharedKit), .mouse(.button5), "arrow.forward.circle"),
             (String(localized: "Wheel Up", bundle: .avoSharedKit), .scrollUp, "arrow.up.circle"),
             (String(localized: "Wheel Down", bundle: .avoSharedKit), .scrollDown, "arrow.down.circle"),
-            (String(localized: "Esc Key", bundle: .avoSharedKit), .key(.escape), "escape"),
             (String(localized: "Delete Key", bundle: .avoSharedKit), .key(.delete), "delete.left"),
         ]
     }
@@ -1748,9 +1742,8 @@ final class KeymapEditorView: NSView {
         if selected != nil, nudge(key, flags: event.modifierFlags) { return }
         guard !event.isARepeat else { return }
         switch key {
-        // What players expect of them in an editor; their menus bind them.
-        case .escape: letGo(removing: false)
-        case .delete, .forwardDelete: letGo(removing: true)
+        // What players expect of it in an editor; its menu binds it.
+        case .delete, .forwardDelete: deleteKey()
         default: assign(.key(key))
         }
     }

@@ -1505,26 +1505,6 @@
         }
       }
     },
-    "Esc Key" : {
-      "localizations" : {
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tombol Esc"
-          }
-        }
-      }
-    },
-    "Esc lets go of the control. To make Esc or Delete a control’s key, right-click the control." : {
-      "localizations" : {
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Esc melepas pilihan kontrol. Untuk menjadikan Esc atau Delete tombol sebuah kontrol, klik kanan kontrol itu."
-          }
-        }
-      }
-    },
     "Every Mode" : {
       "localizations" : {
         "id" : {
@@ -4169,12 +4149,12 @@
         }
       }
     },
-    "Use a mouse button, the wheel, Esc or Delete as its key" : {
+    "Use a mouse button, the wheel or Delete as its key" : {
       "localizations" : {
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pakai tombol mouse, roda, Esc, atau Delete sebagai tombolnya"
+            "value" : "Pakai tombol mouse, roda, atau Delete sebagai tombolnya"
           }
         }
       }

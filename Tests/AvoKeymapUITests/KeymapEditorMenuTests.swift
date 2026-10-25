@@ -39,14 +39,14 @@ struct KeymapEditorMenuTests {
         ]
         let editor = Editor(KeymapProfile(package: "x", name: "x", controls: controls, fps: FPSSettings(aimControl: "eye")))
         defer { editor.close() }
-        let wheel = L("Wheel Up"), left = L("Left Click"), esc = L("Esc Key")
+        let wheel = L("Wheel Up"), left = L("Left Click"), delete = L("Delete Key")
         let tap = titles(editor.view.contextEntries(for: "tap"))
-        #expect(tap.contains(wheel) && tap.contains(left) && tap.contains(esc) && tap.contains(L("Add Action")))
+        #expect(tap.contains(wheel) && tap.contains(left) && tap.contains(delete) && tap.contains(L("Add Action")))
         let anchor = titles(editor.view.contextEntries(for: "anchor"))
         #expect(!anchor.contains(wheel) && anchor.contains(left))
         #expect(anchor.contains("§" + L("Finger reach")) && anchor.contains(L("In a Circle")) && anchor.contains(L("Whole Screen")))
         let area = titles(editor.view.contextEntries(for: "area"))
-        #expect(!area.contains(wheel) && !area.contains(left) && !area.contains(esc))
+        #expect(!area.contains(wheel) && !area.contains(left) && !area.contains(delete))
         let move = titles(editor.view.contextEntries(for: "move"))
         #expect(!move.contains(wheel) && !move.contains(left), "a joystick's keys are set in the panel")
         let eyeMenu = titles(editor.view.contextEntries(for: "eye"))
