@@ -19,8 +19,8 @@ struct KeymapPainter {
     let displayRect: CGRect
     /// Editor: how solid the objects' fills are (Editor Opacity); outlines
     /// and keys stay readable, so a lower value shows the game through them.
-    /// Hints: the player's Key Visibility; the keys stay readable
-    /// at any value, only their plates fade.
+    /// Hints: drawn at 1, and the hints view fades as a whole to the
+    /// player's Key Visibility, letters and all.
     var opacity: CGFloat = 1
     /// Names under the objects (editor only).
     var captions = true
@@ -915,9 +915,10 @@ struct KeymapPainter {
 @MainActor
 public enum KeymapHints {
     public static let changed = Notification.Name("com.avodroid.KeymapHintsChanged")
-    public static let opacityRange = 0.15...1.0
-    /// Clear but light: the keys read on any scene, their plates let the
-    /// game's buttons show through.
+    /// Down to a trace of the keys (the user asked for 5% and 10%).
+    public static let opacityRange = 0.05...1.0
+    /// Clear but light: the keys read on any scene, and the game's buttons
+    /// show through them.
     public static let defaultOpacity = 0.75
 
     public static var visible: Bool {
@@ -938,8 +939,10 @@ public enum KeymapHints {
 
     /// Key Visibility's steps (menus); the editor's slider moves in 5% steps.
     public static var steps: [(opacity: Double, title: String)] {
-        let low = 25, medium = 50, high = 75, full = 100
-        return [(0.25, String(localized: "Low (\(low)%)", bundle: .avoSharedKit)),
+        let faint = 5, veryLow = 10, low = 25, medium = 50, high = 75, full = 100
+        return [(0.05, String(localized: "Faint (\(faint)%)", bundle: .avoSharedKit)),
+                (0.1, String(localized: "Very Low (\(veryLow)%)", bundle: .avoSharedKit)),
+                (0.25, String(localized: "Low (\(low)%)", bundle: .avoSharedKit)),
                 (0.5, String(localized: "Medium (\(medium)%)", bundle: .avoSharedKit)),
                 (0.75, String(localized: "High (\(high)%)", bundle: .avoSharedKit)),
                 (1, String(localized: "Full (\(full)%)", bundle: .avoSharedKit))]
@@ -1003,8 +1006,10 @@ public final class KeymapHintsMenu: NSObject, NSMenuItemValidation, NSMenuDelega
 }
 
 /// The key mapping drawn over the game while playing ("Show on game"): key
-/// caps on the game's buttons, at the visibility the player chose. It never
-/// takes a click.
+/// caps on the game's buttons, at the visibility the player chose: the
+/// whole layer fades to it, the letters with their plates (they stayed
+/// solid while only the plates faded, the user: "harusnya textnya juga"). It
+/// never takes a click.
 @MainActor
 public final class KeymapHintsView: NSView {
     public var profile: KeymapProfile? { didSet { needsDisplay = true } }
@@ -1040,13 +1045,14 @@ public final class KeymapHintsView: NSView {
 
     private func update() {
         isHidden = editing || !gameMode || !KeymapHints.visible
+        // The layer as a whole, so where caps overlap nothing shows darker.
+        alphaValue = CGFloat(KeymapHints.opacity)
         needsDisplay = true
     }
 
     override public func draw(_ dirtyRect: NSRect) {
         guard let profile else { return }
-        let painter = KeymapPainter(displayRect: displayRect(), opacity: CGFloat(KeymapHints.opacity), captions: false, guides: false,
-                                    style: .hint)
+        let painter = KeymapPainter(displayRect: displayRect(), opacity: 1, captions: false, guides: false, style: .hint)
         let eyeKey = profile.fps?.cursorToggle.shortLabel
         let shown = profile.controls.filter { $0.belongs(to: mode) && $0.touchesTheScreen }
         for control in shown where KeymapPainter.isEye(control) { painter.draw(control, eyeKey: eyeKey) }

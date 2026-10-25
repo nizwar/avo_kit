@@ -1625,6 +1625,16 @@
         }
       }
     },
+    "Faint (%lld%%)" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Samar (%lld%%)"
+          }
+        }
+      }
+    },
     "Finger reach" : {
       "localizations" : {
         "id" : {
@@ -4175,6 +4185,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Lihat atas-bawah"
+          }
+        }
+      }
+    },
+    "Very Low (%lld%%)" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sangat Rendah (%lld%%)"
           }
         }
       }
