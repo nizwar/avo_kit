@@ -15,7 +15,8 @@ struct HazeAppearanceTests {
 
     @Test("System follows the Mac; Light and Dark are AppKit's own")
     func appearances() {
-        #expect(HazeAppearance.system.nsAppearance == nil)
+        #expect(HazeAppearance.system.nsAppearance == nil && HazeAppearance.system.colorScheme == nil)
+        #expect(HazeAppearance.light.colorScheme == .light && HazeAppearance.dark.colorScheme == .dark)
         #expect(HazeAppearance.light.nsAppearance?.name == .aqua)
         #expect(HazeAppearance.dark.nsAppearance?.name == .darkAqua)
         #expect(NSAppearance(named: .darkAqua)!.isHazeDark)

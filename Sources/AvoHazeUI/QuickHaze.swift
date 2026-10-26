@@ -1,6 +1,9 @@
 #if canImport(AppKit)
 import AppKit
 #endif
+#if canImport(UIKit)
+import UIKit
+#endif
 import AvoKitResources
 import CoreText
 import SwiftUI
@@ -36,15 +39,27 @@ public enum QuickHaze {
     /// One colour in both looks: `dark` on the near black, `light` on the
     /// paper (`lightAlpha`, else `alpha`), as the view's appearance asks.
     public nonisolated static func rgb(_ dark: UInt32, _ alpha: Double = 1, light: UInt32, _ lightAlpha: Double? = nil) -> Color {
+        #if os(macOS)
         Color(nsColor: nsRGB(dark, CGFloat(alpha), light: light, lightAlpha.map { CGFloat($0) }))
+        #else
+        let night = uiRGB(dark, alpha), paper = uiRGB(light, lightAlpha ?? alpha)
+        return Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? night : paper })
+        #endif
     }
 
+    #if os(macOS)
     /// The same for AppKit views (a layer takes its `cgColor` in the
     /// appearance it is drawn in: `NSAppearance.performAsCurrentDrawingAppearance`).
     public nonisolated static func nsRGB(_ dark: UInt32, _ alpha: CGFloat = 1, light: UInt32, _ lightAlpha: CGFloat? = nil) -> NSColor {
         let night = nsRGB(dark, alpha), paper = nsRGB(light, lightAlpha ?? alpha)
         return NSColor(name: nil) { $0.isHazeDark ? night : paper }
     }
+    #else
+    private nonisolated static func uiRGB(_ value: UInt32, _ alpha: Double) -> UIColor {
+        UIColor(red: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255,
+                blue: CGFloat(value & 0xFF) / 255, alpha: alpha)
+    }
+    #endif
 
     public static let base = rgb(0x0A1108, light: 0xF2F4EA)
     public static let card = rgb(0xF3F1E8, 0.045, light: 0xFFFFFF, 0.62)
@@ -69,8 +84,12 @@ public enum QuickHaze {
     /// A slider's track.
     public static let track = rgb(0x000000, 0.35, light: 0x1A2213, 0.12)
     /// What needs a look (a key not set yet, a problem, the selected part
-    /// of a controller): macOS's yellow on the dark, an amber that reads on the light.
+    /// of a controller): the system's yellow on the dark, an amber that reads on the light.
+    #if os(macOS)
     public static let attention = Color(nsColor: NSColor(name: nil) { $0.isHazeDark ? .systemYellow : nsRGB(0x9A6410) })
+    #else
+    public static let attention = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? .systemYellow : uiRGB(0x9A6410, 1) })
+    #endif
     /// A checkbox that is off, and its edge (none on the dark).
     public static let checkboxOff = rgb(0xFFFFFF, 0.92, light: 0xFFFFFF, 1)
     public static let checkboxEdge = rgb(0xFFFFFF, 0, light: 0x1A2213, 0.3)

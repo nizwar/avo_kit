@@ -1,4 +1,7 @@
+#if os(macOS)
 import AppKit
+#endif
+import SwiftUI
 
 // Which of the haze's two looks a window wears: as the Mac (System), or
 // always Light or always Dark (Settings › General › Appearance in Avo and
@@ -10,6 +13,17 @@ import AppKit
 public enum HazeAppearance: String, CaseIterable, Sendable {
     case system, light, dark
 
+    /// What `.preferredColorScheme` takes for it (an iPhone's or iPad's
+    /// app): nil follows the device.
+    public var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+
+    #if os(macOS)
     /// What `NSApp.appearance` (a window's, a popover's) takes for it: nil
     /// follows the Mac.
     public var nsAppearance: NSAppearance? {
@@ -19,8 +33,10 @@ public enum HazeAppearance: String, CaseIterable, Sendable {
         case .dark: NSAppearance(named: .darkAqua)
         }
     }
+    #endif
 }
 
+#if os(macOS)
 extension NSAppearance {
     /// Dark, or one of its kinds (high contrast, vibrant): the haze's dark look.
     public var isHazeDark: Bool { bestMatch(from: [.aqua, .darkAqua]) == .darkAqua }
@@ -104,3 +120,4 @@ public final class HazeAppearanceFollower: NSObject {
         apply(new)
     }
 }
+#endif
