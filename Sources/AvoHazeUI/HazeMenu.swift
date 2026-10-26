@@ -34,7 +34,7 @@ public struct HazeMenuItem: Identifiable {
     /// tinted as a symbol is.
     public var image: NSImage?
     public var role: Role
-    /// A check mark (`.on`) or a dash (`.mixed`) before the title.
+    /// A check mark (`.on`) or a dash (`.mixed`) at the trailing edge, the row tinted while `.on`.
     public var state: NSControl.StateValue
     public var isEnabled: Bool
     /// A key hint shown at the trailing edge ("⌘I").
@@ -42,11 +42,14 @@ public struct HazeMenuItem: Identifiable {
     public var toolTip: String?
     /// The items it opens under itself, instead of an action.
     public var submenu: (@MainActor () -> [HazeMenuEntry])?
+    /// The menu stays open after the action, for one pressed again and again (Volume Up).
+    public var keepsMenuOpen: Bool
     public var action: @MainActor () -> Void
 
     /// A trailing closure is the action (a submenu is passed by its label).
     public init(title: String, subtitle: String? = nil, symbol: String? = nil, image: NSImage? = nil, role: Role = .normal,
                 state: NSControl.StateValue = .off, isEnabled: Bool = true, shortcut: String? = nil, toolTip: String? = nil,
+                keepsMenuOpen: Bool = false,
                 action: @escaping @MainActor () -> Void = {}, submenu: (@MainActor () -> [HazeMenuEntry])? = nil) {
         self.title = title
         self.subtitle = subtitle
@@ -58,6 +61,7 @@ public struct HazeMenuItem: Identifiable {
         self.shortcut = shortcut
         self.toolTip = toolTip
         self.submenu = submenu
+        self.keepsMenuOpen = keepsMenuOpen
         self.action = action
     }
 }
@@ -705,6 +709,12 @@ final class HazeMenuState {
             toggle(item)
             return
         }
+        if item.keepsMenuOpen {
+            // Pressed again and again (Volume Up): the action runs, the menu stays.
+            highlighted = item.id
+            item.action()
+            return
+        }
         chosen = item.id
         highlighted = item.id
         // Lit a moment, like a menu item, then the menu goes and the action runs.
@@ -933,19 +943,9 @@ struct HazeMenuView: View {
         let open = state.expanded[item.id] != nil
         let tint = destructive ? QuickHaze.danger : (lit ? QuickHaze.accentText : QuickHaze.text)
         let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        let checked = item.state == .on
         return Button { state.choose(item) } label: {
             HStack(spacing: 10) {
-                if marks {
-                    Group {
-                        if item.state != .off {
-                            Image(systemName: item.state == .on ? "checkmark" : "minus")
-                                .font(.system(size: 10.5, weight: .bold))
-                                .foregroundStyle(QuickHaze.accent)
-                        }
-                    }
-                    .frame(width: 12)
-                    .padding(.trailing, -4)
-                }
                 if icons {
                     Group {
                         if !showsIcon {
@@ -991,6 +991,18 @@ struct HazeMenuView: View {
                         .foregroundStyle(QuickHaze.textTertiary)
                         .accessibilityHidden(true)
                 }
+                // The choice's mark at the trailing edge (the titles stay in line), in a column every row of a menu
+                // with marks keeps.
+                if marks {
+                    Group {
+                        if item.state != .off {
+                            Image(systemName: checked ? "checkmark" : "minus")
+                                .font(.system(size: 10.5, weight: .bold))
+                                .foregroundStyle(QuickHaze.accent)
+                        }
+                    }
+                    .frame(width: 12)
+                }
             }
             .padding(.leading, 9 + indent)
             .padding(.trailing, 9)
@@ -1001,6 +1013,9 @@ struct HazeMenuView: View {
                     shape.fill(destructive ? QuickHaze.dangerFill : QuickHaze.selection)
                         .overlay { shape.strokeBorder((destructive ? QuickHaze.danger : QuickHaze.accent).opacity(0.12)) }
                         .matchedGeometryEffect(id: reduceMotion ? AnyHashable(item.id) : AnyHashable("highlight"), in: highlight)
+                } else if checked {
+                    // The choice in force, quietly: the row tinted under its mark.
+                    shape.fill(QuickHaze.accent.opacity(0.08))
                 }
             }
             .contentShape(shape)
