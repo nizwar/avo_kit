@@ -324,7 +324,6 @@ struct KeymapEditorPanel: View {
             if !model.outside { Rectangle().fill(QuickHaze.text.opacity(0.12)).frame(width: 1) }
         }
         .disabled(model.sheetUp)
-        .environment(\.colorScheme, .dark)
         .coordinateSpace(name: Self.space)
         .coordinateSpace(name: ControllerPanelView.space)
     }
@@ -349,7 +348,7 @@ struct KeymapEditorPanel: View {
 
     /// What to do now, or what just happened.
     private var status: some View {
-        let yellow = Color(nsColor: .systemYellow)
+        let yellow = QuickHaze.attention
         return HStack(alignment: .top, spacing: 8) {
             Image(systemName: model.problem ? "exclamationmark.triangle.fill" : "info.circle")
                 .font(.system(size: 12, weight: .semibold))
@@ -703,7 +702,7 @@ private struct ModeTab: View {
                 .frame(width: 120)
                 .padding(.horizontal, 10)
                 .frame(height: 26)
-                .background(Capsule().fill(Color.black.opacity(0.45)))
+                .background(Capsule().fill(QuickHaze.rgb(0x000000, 0.45, light: 0xFFFFFF, 0.9)))
                 .overlay(Capsule().strokeBorder(QuickHaze.accent, lineWidth: 1.5))
                 .focused($typing)
                 .onSubmit { model.rename(mode.id, model.renamingText) }
@@ -746,7 +745,7 @@ private struct ModeTab: View {
                 .monospacedDigit()
                 .padding(.horizontal, 5)
                 .frame(minWidth: 17, minHeight: 15)
-                .background(Capsule().fill(selected ? QuickHaze.onAccent.opacity(0.15) : Color.white.opacity(0.08)))
+                .background(Capsule().fill(selected ? QuickHaze.onAccent.opacity(0.15) : QuickHaze.highlight.opacity(0.08)))
             if selected {
                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)).opacity(0.7)
             }
@@ -994,7 +993,7 @@ private struct InspectorSettings: View {
             if model.barsOverTheEye.contains(control.id) {
                 Text(verbatim: L("Over the eye’s area it would turn the camera, so it can’t be saved there: move it, or give it a mode without the eye."))
                     .font(QuickHaze.mona(11.5))
-                    .foregroundStyle(Color(nsColor: .systemYellow))
+                    .foregroundStyle(QuickHaze.attention)
                     .fixedSize(horizontal: false, vertical: true)
             }
             InspectorRow(label: L("Direction")) {
@@ -1064,7 +1063,7 @@ private struct InspectorSettings: View {
     private func caption(_ text: String, problem: Bool = false) -> some View {
         Text(verbatim: text)
             .font(QuickHaze.mona(11.5))
-            .foregroundStyle(problem ? Color(nsColor: .systemYellow) : QuickHaze.textTertiary)
+            .foregroundStyle(problem ? QuickHaze.attention : QuickHaze.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -1104,7 +1103,7 @@ private struct ActionsSection: View {
             if control.actions.isEmpty, !control.touchesTheScreen {
                 Text(verbatim: L("Add what it does: switch to another mode, or free or lock the mouse."))
                     .font(QuickHaze.mona(11.5))
-                    .foregroundStyle(Color(nsColor: .systemYellow))
+                    .foregroundStyle(QuickHaze.attention)
                     .fixedSize(horizontal: false, vertical: true)
             }
             HazeMenuButton(matchesWidth: true, entries: { model.addActionMenu() }) {
@@ -1202,7 +1201,7 @@ private struct ClickZoneSection: View {
             if locked {
                 Text(verbatim: L("This control works only while the mouse is locked, and clicks on the game press controls only while it is free."))
                     .font(QuickHaze.mona(11.5))
-                    .foregroundStyle(control.clickZone == nil ? QuickHaze.textTertiary : Color(nsColor: .systemYellow))
+                    .foregroundStyle(control.clickZone == nil ? QuickHaze.textTertiary : QuickHaze.attention)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let zone = control.clickZone {
@@ -1231,7 +1230,7 @@ private struct ActionRow: View {
             StepNumber(number: number, dim: false)
             Image(systemName: action.symbol)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(needsEye ? Color(nsColor: .systemYellow) : QuickHaze.accentText)
+                .foregroundStyle(needsEye ? QuickHaze.attention : QuickHaze.accentText)
                 .frame(width: 16)
             if case .switchMode(let mode) = action {
                 Text(verbatim: L("Switch to")).font(QuickHaze.mona(12, 520)).lineLimit(1).layoutPriority(1)
@@ -1256,7 +1255,7 @@ private struct ActionRow: View {
                     if needsEye {
                         Text(verbatim: L("Needs the eye (FPS)"))
                             .font(QuickHaze.mona(10.5, 550))
-                            .foregroundStyle(Color(nsColor: .systemYellow))
+                            .foregroundStyle(QuickHaze.attention)
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)
@@ -1287,7 +1286,7 @@ private struct StepNumber: View {
             .monospacedDigit()
             .foregroundStyle(dim ? QuickHaze.textTertiary : QuickHaze.onAccent)
             .frame(width: 17, height: 17)
-            .background(Circle().fill(dim ? Color.white.opacity(0.08) : QuickHaze.accent))
+            .background(Circle().fill(dim ? QuickHaze.highlight.opacity(0.08) : QuickHaze.accent))
             .accessibilityHidden(true)
     }
 }
@@ -1305,7 +1304,7 @@ private struct RowIconButton: View {
                 .font(.system(size: 9.5, weight: .bold))
                 .foregroundStyle(enabled ? (hovering ? QuickHaze.text : QuickHaze.textSecondary) : QuickHaze.textTertiary.opacity(0.35))
                 .frame(width: 22, height: 24)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering && enabled ? Color.white.opacity(0.08) : .clear))
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering && enabled ? QuickHaze.highlight.opacity(0.08) : .clear))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1364,18 +1363,20 @@ private struct KeyCap: View {
     var active = false
 
     var body: some View {
-        let yellow = Color(nsColor: .systemYellow)
         HStack(spacing: 3) {
             if let symbol { Image(systemName: symbol).font(.system(size: 8.5, weight: .bold)) }
             Text(verbatim: text).font(QuickHaze.mona(12, 650)).lineLimit(1)
         }
-        .foregroundStyle(active ? QuickHaze.onAccent : waiting ? yellow : QuickHaze.text)
+        // Dark ink on the yellow in both looks.
+        .foregroundStyle(active ? QuickHaze.rgb(0x15210E) : waiting ? QuickHaze.attention : QuickHaze.text)
         .padding(.horizontal, 7)
         .frame(minWidth: 24, minHeight: 22)
-        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(active ? yellow : Color.white.opacity(waiting ? 0.04 : 0.1)))
+        .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+            .fill(active ? Color(nsColor: .systemYellow) : QuickHaze.highlight.opacity(waiting ? 0.04 : 0.1)))
         .overlay {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .strokeBorder(waiting ? yellow.opacity(0.7) : QuickHaze.text.opacity(0.18), style: StrokeStyle(lineWidth: 1, dash: waiting ? [3, 2] : []))
+                .strokeBorder(waiting ? QuickHaze.attention.opacity(0.7) : QuickHaze.text.opacity(0.18),
+                              style: StrokeStyle(lineWidth: 1, dash: waiting ? [3, 2] : []))
         }
         .fixedSize()
     }
