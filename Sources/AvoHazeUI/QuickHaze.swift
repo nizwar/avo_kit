@@ -9,7 +9,9 @@ import SwiftUI
 // as the few colours, type and controls an app window's panels use (Quick
 // Settings, the key mapping editor, the Location panel, the widget panels),
 // in a module of its own so Avo Hub's windows wear the same ones
-// (AvoKeymapUI's editor is built from them).
+// (AvoKeymapUI's editor is built from them). Like HazeTheme.swift's, every
+// colour has the haze's two looks: dark, and light on a soft green paper;
+// a view takes the one its appearance asks for (HazeAppearance.swift).
 
 private func L(_ key: String.LocalizationValue) -> String { String(localized: key, bundle: .avoSharedKit) }
 
@@ -31,30 +33,56 @@ public enum QuickHaze {
     }
     #endif
 
-    public static let base = rgb(0x0A1108)
-    public static let card = rgb(0xF3F1E8, 0.045)
-    public static let inset = Color.black.opacity(0.28)
-    public static let text = rgb(0xF3F1E8)
-    public static let textSecondary = rgb(0xC5CDB9)
-    public static let textTertiary = rgb(0x9AA58E)
-    public static let sectionLabel = rgb(0x8F9B84)
-    public static let accent = rgb(0xD8E8A7)
-    public static let onAccent = rgb(0x15210E)
-    public static let accentText = rgb(0xEEF5D6)
-    public static let segmentSelection = rgb(0xD8E8A7, 0.2)
-    /// A menu's lit item (HazeMenu.swift), and a destructive one's.
-    public static let selection = rgb(0xD8E8A7, 0.14)
-    public static let danger = rgb(0xF3B8A2)
-    public static let dangerFill = rgb(0xF39A7C, 0.14)
+    /// One colour in both looks: `dark` on the near black, `light` on the
+    /// paper (`lightAlpha`, else `alpha`), as the view's appearance asks.
+    public nonisolated static func rgb(_ dark: UInt32, _ alpha: Double = 1, light: UInt32, _ lightAlpha: Double? = nil) -> Color {
+        Color(nsColor: nsRGB(dark, CGFloat(alpha), light: light, lightAlpha.map { CGFloat($0) }))
+    }
 
-    /// Near black with a breath of Avo green top right and bottom left.
+    /// The same for AppKit views (a layer takes its `cgColor` in the
+    /// appearance it is drawn in: `NSAppearance.performAsCurrentDrawingAppearance`).
+    public nonisolated static func nsRGB(_ dark: UInt32, _ alpha: CGFloat = 1, light: UInt32, _ lightAlpha: CGFloat? = nil) -> NSColor {
+        let night = nsRGB(dark, alpha), paper = nsRGB(light, lightAlpha ?? alpha)
+        return NSColor(name: nil) { $0.isHazeDark ? night : paper }
+    }
+
+    public static let base = rgb(0x0A1108, light: 0xF2F4EA)
+    public static let card = rgb(0xF3F1E8, 0.045, light: 0xFFFFFF, 0.62)
+    public static let inset = rgb(0x000000, 0.28, light: 0x1A2213, 0.06)
+    public static let text = rgb(0xF3F1E8, light: 0x1A2213)
+    public static let textSecondary = rgb(0xC5CDB9, light: 0x434E37)
+    public static let textTertiary = rgb(0x9AA58E, light: 0x626D56)
+    public static let sectionLabel = rgb(0x8F9B84, light: 0x6B7760)
+    public static let accent = rgb(0xD8E8A7, light: 0x4F7A2F)
+    public static let onAccent = rgb(0x15210E, light: 0xF7FAEC)
+    public static let accentText = rgb(0xEEF5D6, light: 0x3B5E1F)
+    public static let segmentSelection = rgb(0xD8E8A7, 0.2, light: 0x4F7A2F, 0.16)
+    /// A menu's lit item (HazeMenu.swift), and a destructive one's.
+    public static let selection = rgb(0xD8E8A7, 0.14, light: 0x4F7A2F, 0.12)
+    public static let danger = rgb(0xF3B8A2, light: 0xB23F26)
+    public static let dangerFill = rgb(0xF39A7C, 0.14, light: 0xD5573A, 0.12)
+    /// What brightens a control under the pointer: white light on the
+    /// dark, a shade of ink on the light (as `.opacity` of it).
+    public static let highlight = rgb(0xFFFFFF, light: 0x1A2213)
+    /// Shadows (as `.opacity` of it): softer on the light.
+    public static let shadow = rgb(0x000000, light: 0x1C2A12, 0.45)
+    /// A slider's track.
+    public static let track = rgb(0x000000, 0.35, light: 0x1A2213, 0.12)
+    /// What needs a look (a key not set yet, a problem, the selected part
+    /// of a controller): macOS's yellow on the dark, an amber that reads on the light.
+    public static let attention = Color(nsColor: NSColor(name: nil) { $0.isHazeDark ? .systemYellow : nsRGB(0x9A6410) })
+    /// A checkbox that is off, and its edge (none on the dark).
+    public static let checkboxOff = rgb(0xFFFFFF, 0.92, light: 0xFFFFFF, 1)
+    public static let checkboxEdge = rgb(0xFFFFFF, 0, light: 0x1A2213, 0.3)
+
+    /// Near black (or paper) with a breath of Avo green top right and bottom left.
     public static var background: some View {
         ZStack {
             base
-            EllipticalGradient(colors: [rgb(0xD8E8A7, 0.2), rgb(0xD8E8A7, 0)], center: UnitPoint(x: 0.92, y: -0.04),
-                               startRadiusFraction: 0, endRadiusFraction: 0.75)
-            EllipticalGradient(colors: [rgb(0xBCDC8F, 0.09), rgb(0xBCDC8F, 0)], center: UnitPoint(x: 0.06, y: 1.04),
-                               startRadiusFraction: 0, endRadiusFraction: 0.7)
+            EllipticalGradient(colors: [rgb(0xD8E8A7, 0.2, light: 0xB3CB7C), rgb(0xD8E8A7, 0, light: 0xB3CB7C)],
+                               center: UnitPoint(x: 0.92, y: -0.04), startRadiusFraction: 0, endRadiusFraction: 0.75)
+            EllipticalGradient(colors: [rgb(0xBCDC8F, 0.09, light: 0xA9C77F), rgb(0xBCDC8F, 0, light: 0xA9C77F)],
+                               center: UnitPoint(x: 0.06, y: 1.04), startRadiusFraction: 0, endRadiusFraction: 0.7)
         }
     }
 
@@ -421,7 +449,8 @@ public struct QuickCheckbox: View {
         } label: {
             ZStack {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(isOn ? QuickHaze.accent : Color.white.opacity(0.92))
+                    .fill(isOn ? QuickHaze.accent : QuickHaze.checkboxOff)
+                    .overlay { RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(QuickHaze.checkboxEdge.opacity(isOn ? 0 : 1)) }
                     .frame(width: 18, height: 18)
                 if isOn {
                     Image(systemName: "checkmark")
@@ -500,7 +529,7 @@ public struct QuickSegmented<Value: Hashable>: View {
     }
 }
 
-/// The haze slider: an Avo green fill and thumb on a dark track. Drag or
+/// The haze slider: an Avo green fill and thumb on a recessed track. Drag or
 /// click anywhere on it; arrow keys and VoiceOver step it.
 public struct QuickSlider: View {
     let label: String
@@ -531,7 +560,7 @@ public struct QuickSlider: View {
             let fraction = (min(max(value, range.lowerBound), range.upperBound) - range.lowerBound)
                 / max(range.upperBound - range.lowerBound, .ulpOfOne)
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.black.opacity(0.35))
+                Capsule().fill(QuickHaze.track)
                     .overlay { Capsule().strokeBorder(QuickHaze.text.opacity(0.12)) }
                     .frame(height: 5)
                     .padding(.horizontal, thumb / 2)
@@ -541,7 +570,7 @@ public struct QuickSlider: View {
                 Circle()
                     .fill(QuickHaze.accent)
                     .overlay { Circle().strokeBorder(QuickHaze.onAccent.opacity(0.25)) }
-                    .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                    .shadow(color: QuickHaze.shadow.opacity(0.35), radius: 2, y: 1)
                     .frame(width: thumb, height: thumb)
                     .offset(x: width * fraction)
             }

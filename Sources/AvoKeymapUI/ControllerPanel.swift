@@ -372,7 +372,7 @@ private struct DecorationView: View {
         switch decoration {
         case .touchpad(let frame):
             RoundedRectangle(cornerRadius: 6 * scale, style: .continuous)
-                .fill(Color.black.opacity(0.22))
+                .fill(QuickHaze.rgb(0x000000, 0.22, light: 0x1A2213, 0.07))
                 .overlay { RoundedRectangle(cornerRadius: 6 * scale, style: .continuous).strokeBorder(QuickHaze.text.opacity(0.12)) }
                 .frame(width: frame.width * scale, height: frame.height * scale)
                 .position(x: frame.midX * scale, y: frame.midY * scale)
@@ -381,7 +381,7 @@ private struct DecorationView: View {
                 .font(.system(size: frame.height * scale * 0.62, weight: .semibold))
                 .foregroundStyle(QuickHaze.textTertiary.opacity(0.6))
                 .frame(width: frame.width * scale, height: frame.height * scale)
-                .background(Circle().fill(Color.black.opacity(0.22)))
+                .background(Circle().fill(QuickHaze.rgb(0x000000, 0.22, light: 0x1A2213, 0.07)))
                 .help(L("macOS keeps the Home button for itself"))
                 .position(x: frame.midX * scale, y: frame.midY * scale)
         }
@@ -461,7 +461,7 @@ private struct SpotView: View {
 
     private func color(pressed: Bool, bound: Bool, selected: Bool) -> Color {
         if pressed { return QuickHaze.accent }
-        if selected { return Color(nsColor: .systemYellow) }
+        if selected { return QuickHaze.attention }
         return bound ? QuickHaze.text : QuickHaze.textSecondary.opacity(0.75)
     }
 
@@ -472,13 +472,13 @@ private struct SpotView: View {
         case (.stick, .stick(let stick)):
             StickPreview(position: model.reading.position(of: stick), settings: model.settings[stick],
                          pressed: model.reading.pressed.contains(GamepadElement.pressButton(of: stick)),
-                         ring: selected ? Color(nsColor: .systemYellow) : nil, letter: stick == .left ? "L" : "R")
+                         ring: selected ? QuickHaze.attention : nil, letter: stick == .left ? "L" : "R")
         case (.dpadArm, .button(let button)):
             RoundedRectangle(cornerRadius: 3 * scale, style: .continuous)
-                .fill(pressed ? QuickHaze.accent : Color.white.opacity(bound ? 0.2 : 0.11))
+                .fill(pressed ? QuickHaze.accent : QuickHaze.highlight.opacity(bound ? 0.2 : 0.11))
                 .overlay {
                     RoundedRectangle(cornerRadius: 3 * scale, style: .continuous)
-                        .strokeBorder(selected ? Color(nsColor: .systemYellow) : QuickHaze.text.opacity(0.18), lineWidth: selected ? 1.5 : 1)
+                        .strokeBorder(selected ? QuickHaze.attention : QuickHaze.text.opacity(0.18), lineWidth: selected ? 1.5 : 1)
                 }
                 .overlay {
                     Image(systemName: Self.chevron(button))
@@ -487,8 +487,8 @@ private struct SpotView: View {
                 }
         case (.dpadCenter, _):
             Circle()
-                .fill(pressed ? QuickHaze.accent.opacity(0.5) : Color.white.opacity(0.08))
-                .overlay { Circle().strokeBorder(selected ? Color(nsColor: .systemYellow) : QuickHaze.text.opacity(0.2), lineWidth: selected ? 1.5 : 1) }
+                .fill(pressed ? QuickHaze.accent.opacity(0.5) : QuickHaze.highlight.opacity(0.08))
+                .overlay { Circle().strokeBorder(selected ? QuickHaze.attention : QuickHaze.text.opacity(0.2), lineWidth: selected ? 1.5 : 1) }
                 .overlay {
                     Image(systemName: "plus").font(.system(size: 6.5 * scale, weight: .heavy)).foregroundStyle(tint)
                 }
@@ -500,7 +500,7 @@ private struct SpotView: View {
                 .foregroundStyle(tint)
                 .background {
                     if selected {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color(nsColor: .systemYellow).opacity(0.16)).padding(-3)
+                        RoundedRectangle(cornerRadius: 6, style: .continuous).fill(QuickHaze.attention.opacity(0.16)).padding(-3)
                     }
                 }
         default:
@@ -536,14 +536,14 @@ private struct StickPreview: View {
             let travel = r * 0.42
             let x = min(max(position.x, -1), 1), y = min(max(position.y, -1), 1)
             ZStack {
-                Circle().fill(Color.black.opacity(0.32))
+                Circle().fill(QuickHaze.rgb(0x000000, 0.32, light: 0x1A2213, 0.1))
                 Circle().strokeBorder(ring ?? QuickHaze.text.opacity(0.2), lineWidth: ring == nil ? 1 : 1.5)
                 // The dead zone around the centre, as the knob's centre sees it.
                 Circle()
                     .stroke(QuickHaze.accent.opacity(0.55), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
                     .frame(width: max(2 * travel * settings.deadzone, 2), height: max(2 * travel * settings.deadzone, 2))
                 Circle()
-                    .fill(active ? QuickHaze.accent : Color.white.opacity(0.18))
+                    .fill(active ? QuickHaze.accent : QuickHaze.highlight.opacity(0.18))
                     .overlay { Circle().strokeBorder(QuickHaze.onAccent.opacity(active ? 0.3 : 0)) }
                     .frame(width: r * 1.05, height: r * 1.05)
                     .scaleEffect(pressed ? 0.88 : 1)
