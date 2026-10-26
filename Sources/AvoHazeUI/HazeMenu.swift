@@ -156,7 +156,7 @@ public final class HazeMenuPresenter {
         }
         let frame = window.convertToScreen(view.convert(view.bounds, to: nil))
         present(entries, header: header, placement: .below(frame), minWidth: minWidth, event: nil, byKeyboard: byKeyboard,
-                onClose: onClose)
+                appearance: view.effectiveAppearance, onClose: onClose)
     }
 
     /// Shows `menu` in the haze under `view`, as a pull-down menu.
@@ -199,8 +199,10 @@ public final class HazeMenuPresenter {
         }
     }
 
+    /// `appearance`: the look of what it opens from (else the clicked
+    /// window's, the key window's): the menu wears the same.
     private func present(_ entries: [HazeMenuEntry], header: HazeMenuHeader?, placement: Placement, minWidth: CGFloat,
-                         event: NSEvent?, byKeyboard: Bool, onClose: (@MainActor () -> Void)?) {
+                         event: NSEvent?, byKeyboard: Bool, appearance: NSAppearance? = nil, onClose: (@MainActor () -> Void)?) {
         close(animated: false)
         guard entries.contains(where: { $0.menuItem != nil }) else {
             onClose?()
@@ -246,6 +248,7 @@ public final class HazeMenuPresenter {
         }
 
         let panel = HazeMenuPanel(contentRect: NSRect(origin: .zero, size: menu))
+        panel.appearance = appearance ?? (event?.window ?? NSApp.keyWindow)?.effectiveAppearance
         panel.contentView = host
         panel.onKey = { [weak state] event in state?.handle(event) ?? false }
         panel.onResignKey = { [weak self] in self?.close(restoringKey: false) }
@@ -745,7 +748,6 @@ final class HazeMenuPanel: NSPanel {
         isReleasedWhenClosed = false
         animationBehavior = .none
         collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
-        appearance = NSAppearance(named: .darkAqua)
         setAccessibilityRole(.menu)
     }
 
@@ -835,12 +837,12 @@ struct HazeMenuView: View {
         .fixedSize()
         .background {
             ZStack {
-                shape.fill(QuickHaze.rgb(0x121810, 0.97))
+                shape.fill(QuickHaze.rgb(0x121810, 0.97, light: 0xFAFBF5))
                 MenuGlow().clipShape(shape)
             }
         }
         .overlay { shape.strokeBorder(QuickHaze.text.opacity(0.09)) }
-        .shadow(color: .black.opacity(0.55), radius: 18, y: 10)
+        .shadow(color: QuickHaze.rgb(0x000000, 0.55, light: 0x1C2A12, 0.2), radius: 18, y: 10)
         .scaleEffect(state.shown || reduceMotion ? 1 : 0.94, anchor: state.anchor)
         .opacity(state.shown ? 1 : 0)
         .offset(y: state.shown || reduceMotion ? 0 : (state.anchor.y == 0 ? -4 : 4))
@@ -853,7 +855,6 @@ struct HazeMenuView: View {
                alignment: Alignment(horizontal: state.anchor.x == 0 ? .leading : .trailing, vertical: state.anchor.y == 0 ? .top : .bottom))
         // A click around the menu (its shadow is in the panel) closes it.
         .background { Color.clear.contentShape(Rectangle()).onTapGesture { state.onClose?(true) } }
-        .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .contain)
     }
 
@@ -1047,8 +1048,8 @@ private struct NoteWidth: Layout {
 private struct MenuGlow: View {
     var body: some View {
         let gradient = Gradient(stops: [
-            .init(color: QuickHaze.rgb(0xD8E8A7, 0.13), location: 0),
-            .init(color: QuickHaze.rgb(0xD8E8A7, 0), location: 0.7),
+            .init(color: QuickHaze.rgb(0xD8E8A7, 0.13, light: 0xB3CB7C), location: 0),
+            .init(color: QuickHaze.rgb(0xD8E8A7, 0, light: 0xB3CB7C), location: 0.7),
         ])
         Canvas { context, size in
             var layer = context
