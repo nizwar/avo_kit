@@ -9,8 +9,9 @@
 //                wheel's Automatic scroll, Translate Screen)
 //   AvoKeymap    key mapping profiles and the engine that turns keys, the
 //                mouse and controllers into touches
-//   AvoHazeUI    the haze in small: QuickHaze's colours and type, the Quick*
-//                controls, HazeMenu, and FullScreenBars
+//   AvoHazeUI    the haze in small: QuickHaze's colours (dark and light) and
+//                type, the Quick* controls, HazeMenu, FullScreenBars, and
+//                HazeAppearance (System, Light or Dark)
 //   AvoKeymapUI  the key mapping a window runs over its game view: the
 //                controller, the editor and its panels, the hints, GamepadHub
 //
