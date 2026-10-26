@@ -148,22 +148,25 @@ public final class HazeMenuPresenter {
     /// Shows `entries` under `view` (over it where the screen ends below),
     /// its leading edge on the view's: a button's pull-down menu, a
     /// picker's choices. `minWidth`: at least this wide (the picker's).
+    /// `appearance`: the menu's, instead of the view's (a menu bar item's
+    /// button wears the menu bar's).
     public func show(_ entries: [HazeMenuEntry], header: HazeMenuHeader? = nil, below view: NSView, minWidth: CGFloat = 0,
-                     byKeyboard: Bool = false, onClose: (@MainActor () -> Void)? = nil) {
+                     byKeyboard: Bool = false, appearance: NSAppearance? = nil, onClose: (@MainActor () -> Void)? = nil) {
         guard let window = view.window else {
             onClose?()
             return
         }
         let frame = window.convertToScreen(view.convert(view.bounds, to: nil))
         present(entries, header: header, placement: .below(frame), minWidth: minWidth, event: nil, byKeyboard: byKeyboard,
-                appearance: view.effectiveAppearance, onClose: onClose)
+                appearance: appearance ?? view.effectiveAppearance, onClose: onClose)
     }
 
-    /// Shows `menu` in the haze under `view`, as a pull-down menu.
-    public func popUp(_ menu: NSMenu, below view: NSView, onClose: (@MainActor () -> Void)? = nil) {
+    /// Shows `menu` in the haze under `view`, as a pull-down menu
+    /// (`appearance`: as in show(_:below:)).
+    public func popUp(_ menu: NSMenu, below view: NSView, appearance: NSAppearance? = nil, onClose: (@MainActor () -> Void)? = nil) {
         let entries = HazeMenuEntry.entries(from: menu)
         menu.delegate?.menuWillOpen?(menu)
-        show(entries, below: view) {
+        show(entries, below: view, appearance: appearance) {
             menu.delegate?.menuDidClose?(menu)
             onClose?()
         }
