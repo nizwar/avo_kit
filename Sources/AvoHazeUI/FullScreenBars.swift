@@ -46,6 +46,9 @@ public final class FullScreenBars {
     /// The menu bar is hidden from here (`setMenuBarVisible(false)`), which
     /// holds for the whole app until it is made visible again.
     private var hidingMenuBar = false
+    /// The app's presentation options are this window's since it entered
+    /// full screen (`show`, `release`): they hold for the whole app too.
+    private var setOptions = false
     /// AppKit's full-screen animation runs: the pointer brings nothing down.
     public var inTransition = false
     /// The mouse is locked for aiming: the pointer brings nothing down.
@@ -110,9 +113,14 @@ public final class FullScreenBars {
     public func left() {
         giveBackMenuBar()
         NSApp.presentationOptions = []
+        setOptions = false
     }
 
     /// `windowWillClose`: a window closed in full screen never gets `left`.
+    /// What it set goes back, with the bars down or the app in the back as
+    /// much as over the game (the options stayed with the app otherwise,
+    /// auto-hiding its menu bar and the Dock), unless another of the app's
+    /// windows is in full screen: that one's bars hold them now.
     public func stop() {
         watch(false)
         for observer in observers {
@@ -120,10 +128,13 @@ public final class FullScreenBars {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
         observers = []
-        if hidingMenuBar {
+        let window = self.window
+        let anotherInFullScreen = NSApp.windows.contains { $0 !== window && $0.isVisible && $0.styleMask.contains(.fullScreen) }
+        if (hidingMenuBar || setOptions), !anotherInFullScreen {
             giveBackMenuBar()
             NSApp.presentationOptions = []
         }
+        setOptions = false
     }
 
     /// Another app, or another space, comes to the front: the bars go back to
@@ -132,6 +143,7 @@ public final class FullScreenBars {
     public func release() {
         guard inFullScreen else { return }
         NSApp.presentationOptions = Self.system
+        setOptions = true
         giveBackMenuBar()
     }
 
@@ -147,6 +159,7 @@ public final class FullScreenBars {
     private func show(_ shown: Bool) {
         guard inFullScreen else { return }
         isShown = shown
+        setOptions = true
         let started = ContinuousClock.now
         if shown {
             // The title bar has its full-screen layout by now.
