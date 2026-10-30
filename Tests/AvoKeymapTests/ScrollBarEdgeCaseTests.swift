@@ -11,7 +11,7 @@ import Testing
 private let W = 2400.0, H = 1080.0
 
 private func engine(_ profile: KeymapProfile) -> KeymapEngine {
-    KeymapEngine(profile: profile, displayID: 7, width: W, height: H)
+    KeymapEngine(profile: profile, displayID: 7, width: W, height: H, touchSpread: 0)
 }
 
 private func summary(_ events: [TouchEvent]) -> [String] {
@@ -226,13 +226,13 @@ private func eye(area: NormalizedRect = NormalizedRect(0.1, 0.1, 0.6, 0.7)) -> C
         _ = e.handle(.scroll(dy: 1), at: 1)
         _ = e.tick(at: 2)
         _ = e.reset()
-        var next = KeymapEngine(profile: profile, displayID: 7, width: W, height: H, continuing: e)
+        var next = KeymapEngine(profile: profile, displayID: 7, width: W, height: H, touchSpread: 0, continuing: e)
         #expect(next.mode == "car")
         #expect(summary(next.handle(.scroll(dy: 1), at: 3).events).first == "down[0] 0@2160,475")
         // The track moved, and the mode is gone.
         profile.controls[0].kind = .scrollBar(from: NormalizedPoint(0.8, 0.8), to: NormalizedPoint(0.8, 0.2), rest: 0.5, step: 0.1)
         profile.modes = [KeymapMode(id: "foot", name: "Foot")]
-        var moved = KeymapEngine(profile: profile, displayID: 7, width: W, height: H, continuing: e)
+        var moved = KeymapEngine(profile: profile, displayID: 7, width: W, height: H, touchSpread: 0, continuing: e)
         #expect(moved.mode == "foot")
         #expect(summary(moved.handle(.scroll(dy: 1), at: 3).events).first == "down[0] 0@1920,540")
     }

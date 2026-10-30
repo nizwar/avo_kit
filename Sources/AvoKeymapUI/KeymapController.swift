@@ -16,6 +16,8 @@ public final class KeymapController {
     private weak var view: (any KeymapDisplay)?
     private let send: (InputRecord) -> Void
     private let store: KeymapStore
+    /// How far the engine's touches spread (`init(touchSpread:)`).
+    private let touchSpread: Double
     public private(set) var profile: KeymapProfile?
     private var engine: KeymapEngine?
     private var displayLink: CADisplayLink?
@@ -101,13 +103,17 @@ public final class KeymapController {
     /// moves over for it (`onPanelInside`).
     public static var editorPanelWidth: CGFloat { KeymapEditorView.panelWidth }
 
-    public init(package: String, displayID: UInt32, view: any KeymapDisplay, store: KeymapStore,
+    /// - Parameter touchSpread: how far the mapping's touches spread from the
+    ///   points its controls aim at (`KeymapEngine(touchSpread:)`): 1, the
+    ///   default, lands like a finger; 0 touches the exact points, for tests.
+    public init(package: String, displayID: UInt32, view: any KeymapDisplay, store: KeymapStore, touchSpread: Double = 1,
                 send: @escaping (InputRecord) -> Void) {
         self.package = package
         self.displayID = displayID
         self.view = view
         self.send = send
         self.store = store
+        self.touchSpread = touchSpread
         gameMode = store.gameMode()
         load()
         gamepadListener = GamepadHub.shared.addListener { [weak self] inputs, _ in self?.gamepad(inputs) }
@@ -137,7 +143,8 @@ public final class KeymapController {
         }
         let size = view.displaySize
         // The game is where it was: the layout stays in its mode, its scroll bars' thumbs where they are.
-        engine = KeymapEngine(profile: profile, displayID: displayID, width: size.width, height: size.height, continuing: engine)
+        engine = KeymapEngine(profile: profile, displayID: displayID, width: size.width, height: size.height,
+                              touchSpread: touchSpread, continuing: engine)
         updateTicking()
         onProfile?(profile)
         onMode?(engine?.mode)
