@@ -38,7 +38,7 @@ private final class Host {
     }
 
     func controller() -> KeymapController {
-        KeymapController(package: "com.example.game", displayID: 7, view: view, store: store) { [unowned self] in sent.append($0) }
+        KeymapController(package: "com.example.game", displayID: 7, view: view, store: store, touchSpread: 0) { [unowned self] in sent.append($0) }
     }
 
     var touches: [String] {
@@ -109,6 +109,29 @@ struct KeymapControllerTests {
         #expect(saved.controls.map(\.id) == ["jump"])
         #expect(keymap.profile?.controls.map(\.id) == ["jump"])
         #expect(keymap.gameMode && host.gameMode)
+    }
+
+    @Test("By default a key's taps land like a finger: on the button, never on one pixel")
+    func tapsLandLikeAFingerByDefault() {
+        let host = Host(gameMode: true, bundled: jump)
+        let keymap = KeymapController(package: "com.example.game", displayID: 7, view: host.view, store: host.store) { [unowned host] in
+            host.sent.append($0)
+        }
+        defer { keymap.stop() }
+        for _ in 0..<20 {
+            #expect(keymap.key(.space, down: true, isRepeat: false))
+            // Lifts every finger, so the next press is a finger of its own.
+            keymap.focusLost()
+        }
+        let downs = host.sent.compactMap { record -> TouchPointer? in
+            guard case .touch(let event) = record, event.action == .down else { return nil }
+            return event.pointers.first
+        }
+        #expect(downs.count == 20)
+        // The button's face: 80 % of half its size (Control.defaultSize of the display's height), and Float's rounding.
+        let reach = Control.defaultSize * 1080 / 2 * 0.8 + 0.51
+        #expect(downs.allSatisfy { hypot(Double($0.x) - 1200, Double($0.y) - 540) <= reach })
+        #expect(Set(downs.map { "\(Int($0.x.rounded())),\(Int($0.y.rounded()))" }).count >= 15)
     }
 
     @Test("A key the keyboard let go whose keyUp never came is released, and its late keyUp goes nowhere")
